@@ -1,0 +1,13 @@
+{
+  "appId": "com.rotinanoturna.app",
+  "appName": "Rotina Noturna",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#0f1218"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "iconColor": "#7d9bff"
+    }
+  }
+}
