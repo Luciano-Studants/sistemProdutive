@@ -15,7 +15,11 @@ android-keystore/  chave fixa de assinatura do APK (permite atualizar por cima)
 - **Login:** e-mail e senha pelo Supabase. Entrando com o mesmo e-mail no celular e no PC, você vê os mesmos dados.
 - **Sincronização:** cada alteração é salva no Supabase em menos de 1 segundo e aparece no outro aparelho em tempo real. Sem internet, o app guarda no aparelho e envia quando a conexão voltar.
 - **Backup:** o banco guarda a última versão de cada dia durante 30 dias (tabela `app_state_backups`). A versão web ainda exporta e importa backup em arquivo (Hábitos > Ajustes).
-- **Lembretes:** só no app do celular. Fixos às 18:00, 18:30, 21:00, 22:30 e 23:00, mais avisos de entregas da faculdade (véspera e dia, às 18:00). O horário pode atrasar alguns minutos por economia de bateria do Android.
+- **Avisos no celular:** notificações com som e vibração, agendadas no próprio aparelho (funcionam com o app fechado). Rotina fixa às 18:00, 18:30, 21:00, 22:30 e 23:00. Entregas da faculdade, etapas de projeto com prazo e compromissos avisam **4 dias antes** (08:00 e 18:00), **no dia** (08:00, 12:00, 18:00 e 21:00, ou 1 hora antes e na hora quando há horário) e, se atrasarem, por 3 dias seguidos. Tarefas com horário avisam 10 minutos antes e na hora. Ligue em Hábitos > Ajustes e use "Testar aviso". O horário pode atrasar alguns minutos por economia de bateria do Android.
+- **Popup ao abrir:** ao abrir o app (celular ou web), uma janela lista os prazos atrasados e os dos próximos 4 dias, com botão para marcar como feito.
+- **Avisos na web:** notificação do navegador com som enquanto o app ou a aba estiver aberto (pode ficar minimizado). Com o app totalmente fechado, só o celular avisa.
+- **Compromissos:** na aba Semana, para registrar o que foge da rotina (data, horário opcional, tipo e observação), com o mesmo padrão de avisos das entregas.
+- **Instalar no PC:** abra a versão web no Edge ou Chrome e use "Instalar app" (ícone na barra de endereço). Ele ganha janela própria e atualiza sozinho.
 
 ## Configuração inicial (uma vez)
 

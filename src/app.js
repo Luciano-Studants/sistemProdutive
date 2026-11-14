@@ -2,11 +2,11 @@ import './style.css';
 import { createClient } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { LEAD, ROUTINE, KIND_LABEL, buildPlan, dueNow, alertItems, fmtDue } from './plan.js';
 
 (function(){
 'use strict';
-var LS_KEY='rotina-noturna-v1';
-var AREAS={casa:'Casa',faculdade:'Faculdade',estudo:'Estudo',projeto:'Projeto',plan:'Planejamento',livre:'Livre'};
+var AREAS={casa:'Casa',faculdade:'Faculdade',estudo:'Estudo',projeto:'Projeto',plan:'Planejamento',livre:'Livre',outros:'Outros'};
 var AREA_KEYS=Object.keys(AREAS);
 var SLOTS=[{k:'a',t:'18:00–18:30'},{k:'b',t:'18:30–20:30'},{k:'c',t:'21:00–22:30'},{k:'f',t:'22:30–23:00'}];
 var DOW=['dom','seg','ter','qua','qui','sex','sáb'];
@@ -54,13 +54,13 @@ function defTemplate(){
   };
 }
 function defState(){
-  return {v:1,updatedAt:0,template:defTemplate(),tasks:[],deadlines:[],
+  return {v:1,updatedAt:0,template:defTemplate(),tasks:[],deadlines:[],events:[],
     subjects:[{id:'s1',name:'Matemática',min:0,topics:[]},{id:'s2',name:'Física',min:0,topics:[]},{id:'s3',name:'Programação',min:0,topics:[]}],
     projects:[],ideas:[],days:{},screenGoal:120,notif:{on:false}};
 }
 function normalize(r){
   var d=defState(),s=Object.assign(d,r||{});
-  ['tasks','deadlines','subjects','projects','ideas'].forEach(function(k){if(!Array.isArray(s[k]))s[k]=[];});
+  ['tasks','deadlines','events','subjects','projects','ideas'].forEach(function(k){if(!Array.isArray(s[k]))s[k]=[];});
   if(!s.days||typeof s.days!=='object')s.days={};
   var dt=defTemplate();
   if(!s.template||typeof s.template!=='object')s.template=dt;
@@ -96,7 +96,7 @@ function mutate(fn,opts){
 function rollover(){
   var t=todayKey(),ch=false;
   S.tasks.forEach(function(x){
-    if(!x.done&&x.date<t){x.from=x.from||x.date;x.date=t;x.slot='';ch=true;}
+    if(!x.done&&x.date<t){x.from=x.from||x.date;x.date=t;x.slot='';x.time='';ch=true;}
   });
   return ch;
 }
@@ -173,7 +173,7 @@ async function startSession(sess){
       {event:'*',schema:'public',table:'app_state',filter:'user_id=eq.'+userId},
       function(p){if(p.new&&p.new.state)applyRemote(p.new.state);}).subscribe();
   }catch(e){clearTimeout(loadTimer);setSync('err');}
-  scheduleNotifs();
+  scheduleNotifs();maybeAlert();
 }
 function endSession(){
   if(chan&&sb){sb.removeChannel(chan);chan=null;}
@@ -210,13 +210,19 @@ function viewAuth(){
 function viewSettings(){
   var h='<section class="card"><h3>Ajustes</h3>';
   if(session)h+='<p class="hint">Conta: '+esc(session.user.email||'')+'</p>';
-  if(NATIVE){
-    var on=S.notif&&S.notif.on;
-    h+='<div class="drow"><div class="dmain"><span>Lembretes no celular</span><span class="due">18:00 planejar · 18:30 foco · 21:00 segundo bloco · 22:30 fechamento · 23:00 desacelerar, mais avisos de entregas</span></div>'+
-      '<button class="st'+(on?' s2':'')+'" data-act="notif" aria-pressed="'+!!on+'">'+(on?'Ligados':'Desligados')+'</button></div>';
-  }else{
-    h+='<p class="hint">Os lembretes funcionam no app do celular. Aqui na web você vê tudo sincronizado.</p>'+
-      '<div class="tools"><button class="btn ghost" data-act="export">Exportar backup</button>'+
+  var on=pushOn(),canWeb=!NATIVE&&typeof Notification!=='undefined';
+  var rules='Rotina: 18:00, 18:30, 21:00, 22:30 e 23:00. Entregas, etapas e compromissos: '+LEAD+' dias antes (08:00 e 18:00), no dia (08:00, 12:00, 18:00 e 21:00, ou 1 hora antes e na hora quando tem horário) e, se atrasarem, por 3 dias seguidos.';
+  if(NATIVE||canWeb){
+    var active=on&&(NATIVE||Notification.permission==='granted');
+    h+='<div class="drow"><div class="dmain"><span>Avisos com som'+(NATIVE?' e vibração':' neste navegador')+'</span><span class="due">'+rules+'</span></div>'+
+      '<button class="st'+(active?' s2':'')+'" data-act="notif" aria-pressed="'+active+'">'+(active?'Ligados':'Desligados')+'</button></div>';
+    if(!NATIVE)h+='<p class="hint">Na web os avisos saem enquanto o app ou a aba estiver aberto, mesmo minimizado. Para ser avisado com o app fechado, use o app do celular.</p>';
+    if(!NATIVE&&Notification.permission==='denied')h+='<p class="note">O navegador bloqueou as notificações deste site. Libere no cadeado ao lado do endereço e ligue de novo.</p>';
+    if(active)h+='<div class="tools"><button class="btn ghost" data-act="ntest">Testar aviso</button></div>';
+  }else h+='<p class="hint">Este navegador não oferece notificações.</p>';
+  if(notifMsg)h+='<p class="note">'+esc(notifMsg)+'</p>';
+  if(!NATIVE){
+    h+='<div class="tools"><button class="btn ghost" data-act="export">Exportar backup</button>'+
       '<label class="btn ghost filebtn" for="imp-file">Importar backup</label><input id="imp-file" type="file" accept="application/json" data-field="import" hidden></div>';
   }
   if(importMsg)h+='<p class="note">'+esc(importMsg)+'</p>';
@@ -224,40 +230,130 @@ function viewSettings(){
   return h+'</section>';
 }
 
-/* ---------- lembretes (app do celular) ---------- */
-var NOTIF_TIMES=[
-  {id:101,h:18,m:0,t:'Hora de planejar',b:'Escolha a tarefa principal de hoje.'},
-  {id:102,h:18,m:30,t:'Bloco de foco',b:'Celular longe e uma tarefa só por duas horas.'},
-  {id:103,h:21,m:0,t:'Segundo bloco',b:'Estudo ou projeto. Pausa de 10 minutos a cada 50.'},
-  {id:104,h:22,m:30,t:'Fechamento do dia',b:'Marque o que fez e escreva a primeira ação de amanhã.'},
-  {id:105,h:23,m:0,t:'Hora de desacelerar',b:'Sem telas estimulantes. Durma cedo.'}
-];
-var notifTimer=0;
+/* ---------- avisos: itens, celular, web e popup ---------- */
+var NOTIF_MAX=150;
+var notifTimer=0,notifMsg='',alertOpen=false,hiddenAt=0;
+function pushOn(){try{return localStorage.getItem('rotina-push')==='1';}catch(e){return false;}}
+function setPush(v){try{localStorage.setItem('rotina-push',v?'1':'0');}catch(e){}}
+
+/* Tudo que pode gerar aviso, num formato único. */
+function collectItems(){
+  var out=[];
+  S.deadlines.forEach(function(d){
+    if(!d.done)out.push({kind:'dl',id:d.id,title:d.title,sub:d.subject||'Faculdade',date:d.due,time:'',overdue:true});
+  });
+  S.projects.forEach(function(p){
+    if(p.done)return;
+    p.steps.forEach(function(st){
+      if(!st.done&&st.due)out.push({kind:'step',id:st.id,pid:p.id,title:st.title,sub:p.name,date:st.due,time:'',overdue:true});
+    });
+  });
+  S.events.forEach(function(e){
+    if(!e.done)out.push({kind:'ev',id:e.id,title:e.title,sub:AREAS[e.area]||'Outros',date:e.date,time:e.time||'',overdue:false});
+  });
+  S.tasks.forEach(function(t){
+    if(!t.done&&t.time)out.push({kind:'task',id:t.id,title:t.title,sub:'',date:t.date,time:t.time,overdue:false});
+  });
+  return out;
+}
+
+/* Celular: notificações locais agendadas, com som e vibração. */
 function scheduleNotifs(){
   if(!NATIVE)return;
   clearTimeout(notifTimer);notifTimer=setTimeout(function(){applyNotifs(false);},1500);
 }
+async function setupChannels(){
+  try{
+    await LocalNotifications.createChannel({id:'prazos',name:'Prazos e compromissos',description:'Entregas, etapas e compromissos, com som e vibração',importance:5,visibility:1,vibration:true,lights:true,lightColor:'#7d9bff'});
+    await LocalNotifications.createChannel({id:'rotina',name:'Rotina diária',description:'Lembretes dos blocos da noite',importance:4,visibility:1,vibration:true});
+  }catch(e){}
+}
 async function applyNotifs(ask){
-  if(!NATIVE)return;
+  if(!NATIVE)return false;
   try{
     var pend=await LocalNotifications.getPending();
     if(pend.notifications.length)await LocalNotifications.cancel({notifications:pend.notifications.map(function(n){return {id:n.id};})});
-    if(!S.notif||!S.notif.on||(sb&&!userId))return;
+    if(!pushOn()||(sb&&!userId))return false;
     var perm=await LocalNotifications.checkPermissions();
     if(perm.display!=='granted'&&ask)perm=await LocalNotifications.requestPermissions();
-    if(perm.display!=='granted')return;
-    var list=NOTIF_TIMES.map(function(n){
-      return {id:n.id,title:n.t,body:n.b,schedule:{on:{hour:n.h,minute:n.m},allowWhileIdle:true}};
+    if(perm.display!=='granted')return false;
+    await setupChannels();
+    var list=ROUTINE.map(function(n){
+      return {id:n.id,title:n.t,body:n.b,channelId:'rotina',schedule:{on:{hour:n.h,minute:n.m},allowWhileIdle:true}};
     });
-    var now=new Date(),i=0;
-    S.deadlines.filter(function(d){return !d.done;}).forEach(function(d){
-      [[-1,'Entrega amanhã'],[0,'Entrega hoje']].forEach(function(p){
-        var at=parse(addDays(d.due,p[0]));at.setHours(18,0,0,0);
-        if(at>now&&i<40){list.push({id:2000+i,title:p[1],body:(d.subject?d.subject+': ':'')+d.title,schedule:{at:at,allowWhileIdle:true}});i++;}
-      });
+    buildPlan(collectItems(),new Date(),NOTIF_MAX).forEach(function(p,i){
+      list.push({id:3000+i,title:p.title,body:p.body,channelId:'prazos',schedule:{at:p.at,allowWhileIdle:true}});
     });
     await LocalNotifications.schedule({notifications:list});
+    return true;
+  }catch(e){return false;}
+}
+
+/* Web: notificação do navegador com som, enquanto o app estiver aberto. */
+var AC=null;
+function unlockAudio(){
+  try{
+    AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+    if(AC.state==='suspended')AC.resume();
   }catch(e){}
+}
+function beep(){
+  try{
+    if(!AC)return;
+    var t=AC.currentTime;
+    [880,1175,880].forEach(function(f,i){
+      var o=AC.createOscillator(),g=AC.createGain(),s=t+i*0.2;
+      o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.3,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.17);
+      o.connect(g);g.connect(AC.destination);o.start(s);o.stop(s+0.19);
+    });
+  }catch(e){}
+}
+function showWeb(p,key){
+  var opts={body:p.body,tag:key,icon:'icon-192.png'};
+  try{new Notification(p.title,opts);}
+  catch(e){try{navigator.serviceWorker.ready.then(function(r){r.showNotification(p.title,opts);});}catch(e2){}}
+  beep();
+}
+function firedLoad(){try{return JSON.parse(localStorage.getItem('rotina-fired')||'{}');}catch(e){return {};}}
+function webTick(){
+  if(NATIVE||typeof Notification==='undefined'||!pushOn()||Notification.permission!=='granted')return;
+  if(sb&&!userId)return;
+  var now=new Date(),fired=firedLoad(),ch=false,limit=now.getTime()-3*86400000;
+  dueNow(collectItems(),now,3*60000).forEach(function(p){
+    var key=p.at.getTime()+'|'+p.title+'|'+p.body;
+    if(fired[key])return;
+    fired[key]=now.getTime();ch=true;showWeb(p,key);
+  });
+  Object.keys(fired).forEach(function(k){if(fired[k]<limit){delete fired[k];ch=true;}});
+  if(ch){try{localStorage.setItem('rotina-fired',JSON.stringify(fired));}catch(e){}}
+}
+
+/* Popup ao abrir: atrasados e prazos dos próximos dias. */
+function alertHtml(items){
+  function row(i){
+    var c=i.n<0?'late':(i.n<=1?'soon':'');
+    return '<div class="drow"><button class="chk sm" data-act="mdone" data-kind="'+i.kind+'" data-id="'+i.id+'"'+(i.pid?' data-p="'+i.pid+'"':'')+' aria-label="Marcar como feito">'+CHECK+'</button>'+
+      '<div class="dmain"><span>'+esc(i.title)+'</span><span><span class="chip">'+esc(i.sub||'')+'</span> <span class="chip">'+esc(KIND_LABEL[i.kind])+'</span> <span class="due '+c+'">'+fmtDue(i.n,i.time,i.date)+'</span></span></div></div>';
+  }
+  function grp(t,a){return a.length?'<h3>'+t+'</h3><div class="list">'+a.map(row).join('')+'</div>':'';}
+  var late=items.filter(function(i){return i.n<0;}),today=items.filter(function(i){return i.n===0;}),soon=items.filter(function(i){return i.n>0;});
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="md-t"><h2 id="md-t">Atenção aos prazos</h2>'+
+    '<p class="hint">'+items.length+(items.length===1?' item pede':' itens pedem')+' sua atenção. Marque o que já fez.</p>'+
+    grp('Atrasados',late)+grp('Hoje',today)+grp('Próximos '+LEAD+' dias',soon)+
+    '<div class="tools"><button class="btn" id="md-close" data-act="mclose">Fechar</button></div></div>';
+}
+function renderModal(){
+  var el=document.getElementById('modal');if(!el)return;
+  var items=alertOpen?alertItems(collectItems(),todayKey()):[];
+  if(!items.length){alertOpen=false;el.hidden=true;el.innerHTML='';return;}
+  el.innerHTML=alertHtml(items);el.hidden=false;
+  var c=document.getElementById('md-close');if(c)c.focus();
+}
+function maybeAlert(){
+  if(alertOpen||(sb&&!userId))return;
+  if(!alertItems(collectItems(),todayKey()).length)return;
+  alertOpen=true;renderModal();
 }
 
 
@@ -269,7 +365,7 @@ function delBtn(kind,id,parent){
 function areaOpts(sel){return AREA_KEYS.map(function(a){return '<option value="'+a+'"'+(a===sel?' selected':'')+'>'+AREAS[a]+'</option>';}).join('');}
 function taskLi(t){
   return '<li class="task'+(t.done?' is-done':'')+'"><button class="chk sm'+(t.done?' on':'')+'" data-act="task" data-id="'+t.id+'" aria-pressed="'+!!t.done+'" aria-label="Marcar tarefa">'+CHECK+'</button>'+
-    '<span class="tt">'+esc(t.title)+'<small class="tarea a-'+t.area+'">'+AREAS[t.area]+(t.from?' · reagendada de '+shortD(t.from):'')+'</small></span>'+delBtn('task',t.id)+'</li>';
+    '<span class="tt">'+esc(t.title)+'<small class="tarea a-'+t.area+'">'+(t.time?t.time+' · ':'')+(AREAS[t.area]||'Outros')+(t.from?' · reagendada de '+shortD(t.from):'')+'</small></span>'+delBtn('task',t.id)+'</li>';
 }
 function rating(slot,b){
   function row(kind,label){
@@ -318,7 +414,7 @@ function viewHoje(){
   var k=todayKey(),dow=parse(k).getDay(),day=getDay(k),yest=getDay(addDays(k,-1));
   var planned=SLOTS.filter(function(s){return s.k==='f'||cell(dow,s.k).a!=='livre';});
   var doneN=planned.filter(function(s){return (day.blocks[s.k]||{}).done;}).length;
-  var tasks=S.tasks.filter(function(t){return t.date===k;});
+  var tasks=S.tasks.filter(function(t){return t.date===k;}).sort(function(a,b){return (a.time||'99:99').localeCompare(b.time||'99:99');});
   var loose=tasks.filter(function(t){return !t.slot;});
   var soon=S.deadlines.filter(function(d){return !d.done&&diffDays(d.due,k)<=7;}).sort(function(a,b){return a.due.localeCompare(b.due);});
   var goal=S.screenGoal,scr=day.screen;
@@ -328,14 +424,18 @@ function viewHoje(){
     '<div class="stat"><span>Telas</span><b class="'+(scr==null?'':(scr<=goal?'ok':'over'))+'">'+(scr==null?'—':fmtMin(scr))+'</b></div></div>';
   if(yest.next)h+='<p class="note">Ontem você deixou como primeira ação: <b>'+esc(yest.next)+'</b></p>';
   h+='<section class="card"><label class="lab" for="main">Tarefa principal de hoje</label><input id="main" data-field="main" value="'+esc(day.main||'')+'" placeholder="O que precisa estar pronto até 23h?" autocomplete="off"></section>';
+  var evToday=S.events.filter(function(e){return e.date===k&&!e.done;}).sort(evSort);
+  if(evToday.length)h+='<section class="card"><h3>Compromissos de hoje</h3><div class="list">'+evToday.map(evRow).join('')+'</div></section>';
   h+='<div class="blocks">'+SLOTS.map(function(s){return blockRow(s,dow,day,tasks);}).join('')+'</div>';
   if(loose.length)h+='<section class="card"><h3>Sem bloco</h3><p class="hint">Tarefas avulsas e reagendadas. Escolha o próximo bloco livre para cada uma.</p><ul class="tl">'+loose.map(taskLi).join('')+'</ul></section>';
   h+=timerCard();
   h+='<section class="card"><h3>Nova tarefa</h3><form class="addrow wide" data-form="task">'+
     '<input id="nt-title" name="title" placeholder="Ex.: revisar lista de Física" required autocomplete="off" class="full">'+
-    '<select id="nt-area" name="area" aria-label="Tipo">'+areaOpts('estudo')+'</select>'+
-    '<select id="nt-slot" name="slot" aria-label="Bloco"><option value="">Sem bloco</option><option value="a">18:00</option><option value="b">18:30</option><option value="c">21:00</option></select>'+
-    '<button class="btn" type="submit">Adicionar</button></form></section>';
+    '<label class="fld"><span class="lab">Tipo</span><select id="nt-area" name="area">'+areaOpts('estudo')+'</select></label>'+
+    '<label class="fld"><span class="lab">Horário (opcional)</span><input id="nt-time" name="time" type="time"></label>'+
+    '<label class="fld"><span class="lab">Bloco</span><select id="nt-slot" name="slot"><option value="">Sem bloco</option><option value="a">18:00</option><option value="b">18:30</option><option value="c">21:00</option></select></label>'+
+    '<button class="btn" type="submit">Adicionar</button></form>'+
+    '<p class="hint">Com horário, o celular avisa 10 minutos antes e na hora.</p></section>';
   if(soon.length)h+='<section class="card"><h3>Entregas próximas</h3><div class="list">'+soon.map(dlRow).join('')+'</div></section>';
   return h;
 }
@@ -355,6 +455,36 @@ function weekStats(){
   });
   return {per:per,slot:slot};
 }
+function evSort(a,b){return a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||'');}
+function evRow(e){
+  var n=diffDays(e.date,todayKey()),past=n<0,di=dueInfo(e.date);
+  var when=past?'em '+shortD(e.date):di.t,c=(e.done||past)?'':di.c;
+  return '<div class="drow"><button class="chk sm'+(e.done?' on':'')+'" data-act="ev" data-id="'+e.id+'" aria-pressed="'+!!e.done+'" aria-label="Concluir compromisso">'+CHECK+'</button>'+
+    '<div class="dmain"><span>'+esc(e.title)+'</span><span><span class="chip">'+esc(AREAS[e.area]||'Outros')+'</span> <span class="due '+c+'">'+when+(e.time?' às '+e.time:'')+'</span></span>'+
+    (e.note?'<span class="due">'+esc(e.note)+'</span>':'')+'</div>'+delBtn('ev',e.id)+'</div>';
+}
+function eventsSection(){
+  var k=todayKey();
+  var open=S.events.filter(function(e){return !e.done;}).sort(evSort);
+  var past=open.filter(function(e){return e.date<k;});
+  var today=open.filter(function(e){return e.date===k;});
+  var week=open.filter(function(e){var n=diffDays(e.date,k);return n>0&&n<=7;});
+  var later=open.filter(function(e){return diffDays(e.date,k)>7;});
+  var done=S.events.filter(function(e){return e.done;}).sort(function(a,b){return evSort(b,a);}).slice(0,5);
+  function grp(t,a){return a.length?'<section class="card"><h3>'+t+'</h3><div class="list">'+a.map(evRow).join('')+'</div></section>':'';}
+  var h='<h2>Compromissos e atividades</h2><p class="hint">Registre o que foge da rotina. Os avisos seguem o padrão das entregas: '+LEAD+' dias antes, no dia e na hora marcada.</p>'+
+    '<section class="card"><h3>Novo compromisso</h3><form class="addrow" data-form="ev">'+
+    '<input id="ev-title" name="title" class="full" placeholder="Ex.: consulta, reunião, visita" required autocomplete="off">'+
+    '<label class="fld"><span class="lab">Data</span><input id="ev-date" name="date" type="date" value="'+k+'" required></label>'+
+    '<label class="fld"><span class="lab">Horário (opcional)</span><input id="ev-time" name="time" type="time"></label>'+
+    '<label class="fld"><span class="lab">Tipo</span><select id="ev-area" name="area">'+areaOpts('outros')+'</select></label>'+
+    '<label class="fld"><span class="lab">Observação</span><input id="ev-note" name="note" placeholder="Local, quem, detalhe" autocomplete="off"></label>'+
+    '<button class="btn" type="submit">Adicionar compromisso</button></form></section>';
+  if(!open.length)h+='<p class="empty">Nenhum compromisso pendente.</p>';
+  h+=grp('Passados sem marcar',past)+grp('Hoje',today)+grp('Próximos 7 dias',week)+grp('Mais adiante',later);
+  if(done.length)h+='<section class="card"><h3>Concluídos recentemente</h3><div class="list">'+done.map(evRow).join('')+'</div></section>';
+  return h;
+}
 function viewSemana(){
   var k=todayKey(),td=parse(k).getDay(),st=weekStats();
   var totPl=0,totDn=0,foc=0,scrs=[];
@@ -371,6 +501,7 @@ function viewSemana(){
     '<div class="bars" role="img" aria-label="Blocos concluídos por dia">'+bars+'</div>'+
     '<p class="hint">'+totDn+' de '+totPl+' blocos concluídos · foco total '+fmtMin(foc)+(scrs.length?' · telas, média de '+fmtMin(avg(scrs))+' por dia':'')+'</p>'+
     '<p class="note">'+insight+'</p></section>';
+  h+=eventsSection();
   h+='<h2>Grade semanal</h2><p class="hint">Toque no nome para editar. Toque na bolinha para mudar o tipo do bloco.</p><div class="grid2">';
   WEEK_ORDER.forEach(function(d){
     h+='<section class="card daycard'+(d===td?' today':'')+'"><h3>'+DOW_FULL[d]+(d===td?' <span class="pill">hoje</span>':'')+'</h3>';
@@ -438,10 +569,10 @@ function projCard(p){
     '<div class="progress" role="img" aria-label="'+pct+'% concluído"><i style="width:'+pct+'%"></i></div>'+
     '<div><label class="lab" for="pg-'+p.id+'">Pronto quando</label><input id="pg-'+p.id+'" data-field="pgoal" data-id="'+p.id+'" value="'+esc(p.goal||'')+'" placeholder="Defina a versão mínima que conta como pronta" autocomplete="off"></div>';
   if(tot)h+='<ul class="tl">'+p.steps.map(function(s){
-    return '<li class="task'+(s.done?' is-done':'')+'"><button class="chk sm'+(s.done?' on':'')+'" data-act="step" data-id="'+s.id+'" data-p="'+p.id+'" aria-pressed="'+!!s.done+'" aria-label="Concluir etapa">'+CHECK+'</button><span class="tt">'+esc(s.title)+'</span>'+delBtn('step',s.id,p.id)+'</li>';
+    return '<li class="task'+(s.done?' is-done':'')+'"><button class="chk sm'+(s.done?' on':'')+'" data-act="step" data-id="'+s.id+'" data-p="'+p.id+'" aria-pressed="'+!!s.done+'" aria-label="Concluir etapa">'+CHECK+'</button><span class="tt">'+esc(s.title)+(s.due?'<small class="due '+(s.done?'':dueInfo(s.due).c)+'">'+(s.done?'prazo '+shortD(s.due):dueInfo(s.due).t)+'</small>':'')+'</span>'+delBtn('step',s.id,p.id)+'</li>';
   }).join('')+'</ul>';
   else h+='<p class="empty">Quebre em etapas de até 90 minutos.</p>';
-  h+='<form class="goalrow" data-form="step" data-id="'+p.id+'"><input id="st-'+p.id+'" name="title" placeholder="Nova etapa (até 90 min)" autocomplete="off" required aria-label="Nova etapa"><button class="btn" type="submit">Incluir</button></form>';
+  h+='<form class="goalrow" data-form="step" data-id="'+p.id+'"><input id="st-'+p.id+'" name="title" placeholder="Nova etapa (até 90 min)" autocomplete="off" required aria-label="Nova etapa"><input id="sd-'+p.id+'" name="due" type="date" class="dateinp" aria-label="Prazo da etapa (opcional)" title="Prazo opcional: o app avisa '+LEAD+' dias antes"><button class="btn" type="submit">Incluir</button></form>';
   h+='<div class="tools">'+(p.active?'<button class="btn ghost" data-act="ppark" data-id="'+p.id+'">Guardar</button>':'<button class="btn" data-act="pact" data-id="'+p.id+'">Ativar</button>')+
     '<button class="btn ghost" data-act="pdone" data-id="'+p.id+'">'+(p.done?'Reabrir':'Concluir')+'</button></div></section>';
   return h;
@@ -503,7 +634,7 @@ function viewHab(){
 var VIEWS={hoje:viewHoje,semana:viewSemana,faculdade:viewFac,estudos:viewEstudos,projetos:viewProj,habitos:viewHab};
 function renderHead(){
   var el=document.getElementById('hd-date');
-  if(el)el.textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+  if(el){var t=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});el.textContent=t.charAt(0).toUpperCase()+t.slice(1);}
 }
 function renderNav(){
   document.getElementById('nav').innerHTML=TABS.map(function(t){
@@ -565,6 +696,7 @@ var ACTIONS={
     mutate(function(s){
       if(kind==='task')s.tasks=s.tasks.filter(function(x){return x.id!==id;});
       else if(kind==='dl')s.deadlines=s.deadlines.filter(function(x){return x.id!==id;});
+      else if(kind==='ev')s.events=s.events.filter(function(x){return x.id!==id;});
       else if(kind==='subj')s.subjects=s.subjects.filter(function(x){return x.id!==id;});
       else if(kind==='proj')s.projects=s.projects.filter(function(x){return x.id!==id;});
       else if(kind==='idea')s.ideas=s.ideas.filter(function(x){return x.id!==id;});
@@ -578,7 +710,49 @@ var ACTIONS={
     timer.done=false;timer.endAt=Date.now()+timer.left*1000;timer.running=true;
     clearInterval(timer.iv);timer.iv=setInterval(tickTimer,500);render();
   },
-  notif:function(){mutate(function(s){s.notif.on=!s.notif.on;},{render:true});applyNotifs(true);},
+  notif:async function(){
+    notifMsg='';
+    if(pushOn()){setPush(false);render();applyNotifs(false);return;}
+    if(NATIVE){
+      setPush(true);
+      var ok=await applyNotifs(true);
+      if(!ok){setPush(false);notifMsg='Não foi possível ligar. Libere as notificações do app nas configurações do Android e tente de novo.';}
+      render();return;
+    }
+    if(typeof Notification==='undefined')return;
+    unlockAudio();
+    var perm=Notification.permission;
+    if(perm!=='granted'){try{perm=await Notification.requestPermission();}catch(e){}}
+    if(perm==='granted'){setPush(true);webTick();}
+    render();
+  },
+  ntest:async function(){
+    var p={title:'Teste de aviso',body:'Se você ouviu o som e sentiu a vibração, os avisos estão funcionando.'};
+    if(NATIVE){
+      try{
+        var perm=await LocalNotifications.checkPermissions();
+        if(perm.display!=='granted')perm=await LocalNotifications.requestPermissions();
+        if(perm.display!=='granted'){notifMsg='Permissão negada. Libere as notificações do app nas configurações do Android.';render();return;}
+        await setupChannels();
+        await LocalNotifications.schedule({notifications:[{id:9,title:p.title,body:p.body,channelId:'prazos',schedule:{at:new Date(Date.now()+5000),allowWhileIdle:true}}]});
+        notifMsg='O aviso de teste chega em 5 segundos. Pode bloquear a tela.';
+      }catch(e){notifMsg='Não foi possível agendar o teste.';}
+    }else if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
+      unlockAudio();showWeb(p,'teste'+Date.now());notifMsg='Aviso de teste enviado.';
+    }else notifMsg='Ligue os avisos antes de testar.';
+    render();
+  },
+  ev:function(b){var id=b.dataset.id;mutate(function(s){s.events.forEach(function(x){if(x.id===id)x.done=!x.done;});});},
+  mdone:function(b){
+    var kind=b.dataset.kind,id=b.dataset.id,pid=b.dataset.p;
+    mutate(function(s){
+      if(kind==='dl')s.deadlines.forEach(function(x){if(x.id===id)x.done=true;});
+      else if(kind==='ev')s.events.forEach(function(x){if(x.id===id)x.done=true;});
+      else if(kind==='step'){var pj=s.projects.filter(function(x){return x.id===pid;})[0];if(pj)pj.steps.forEach(function(x){if(x.id===id)x.done=true;});}
+    });
+    renderModal();
+  },
+  mclose:function(){alertOpen=false;renderModal();},
   logout:async function(){if(sb)await sb.auth.signOut();},
   export:function(){
     var blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
@@ -589,8 +763,8 @@ var ACTIONS={
 };
 var FORMS={
   auth:function(fd,f,sub){doAuth(sub&&sub.value==='up'?'up':'in',String(fd.get('email')||'').trim(),String(fd.get('password')||''));},
-  task:function(fd){var title=String(fd.get('title')||'').trim();if(!title)return;var area=fd.get('area')||'estudo',slot=fd.get('slot')||'';
-    mutate(function(s){s.tasks.push({id:uid(),title:title,area:area,date:todayKey(),slot:slot,done:false});});},
+  task:function(fd){var title=String(fd.get('title')||'').trim();if(!title)return;var area=fd.get('area')||'estudo',slot=fd.get('slot')||'',time=String(fd.get('time')||'');
+    mutate(function(s){s.tasks.push({id:uid(),title:title,area:area,date:todayKey(),slot:slot,time:time,done:false});});},
   dl:function(fd){var title=String(fd.get('title')||'').trim(),sub=String(fd.get('subject')||'').trim(),due=String(fd.get('due')||'');if(!title||!due)return;
     mutate(function(s){s.deadlines.push({id:uid(),subject:sub,title:title,due:due,done:false});});},
   topic:function(fd,f){var title=String(fd.get('title')||'').trim(),id=f.dataset.id;if(!title)return;
@@ -600,8 +774,11 @@ var FORMS={
   proj:function(fd){var name=String(fd.get('name')||'').trim();if(!name)return;var kind=fd.get('kind')||'dev',goal=String(fd.get('goal')||'').trim();
     mutate(function(s){var has=s.projects.some(function(p){return p.active&&!p.done;});
       s.projects.push({id:uid(),name:name,kind:kind,goal:goal,steps:[],active:!has,done:false});});},
-  step:function(fd,f){var title=String(fd.get('title')||'').trim(),id=f.dataset.id;if(!title)return;
-    mutate(function(s){var p=findP(id);if(p)p.steps.push({id:uid(),title:title,done:false});});},
+  step:function(fd,f){var title=String(fd.get('title')||'').trim(),id=f.dataset.id,due=String(fd.get('due')||'');if(!title)return;
+    mutate(function(s){var p=findP(id);if(p)p.steps.push({id:uid(),title:title,due:due,done:false});});},
+  ev:function(fd){var title=String(fd.get('title')||'').trim(),date=String(fd.get('date')||'');if(!title||!date)return;
+    var time=String(fd.get('time')||''),area=fd.get('area')||'outros',note=String(fd.get('note')||'').trim();
+    mutate(function(s){s.events.push({id:uid(),title:title,date:date,time:time,area:area,note:note,done:false});});},
   idea:function(fd){var text=String(fd.get('text')||'').trim();if(!text)return;var kind=fd.get('kind')||'dev';
     mutate(function(s){s.ideas.unshift({id:uid(),text:text,kind:kind});});},
   screen:function(fd){var m=parseInt(fd.get('min'),10),g=parseInt(fd.get('goal'),10);
@@ -654,20 +831,31 @@ function dayCheck(){
   }
 }
 document.addEventListener('visibilitychange',function(){
-  if(document.visibilityState==='visible'){dayCheck();pullNow();}
-  else if(dirty)flush();
+  if(document.visibilityState==='visible'){
+    dayCheck();pullNow();scheduleNotifs();webTick();
+    if(hiddenAt&&Date.now()-hiddenAt>10*60000)maybeAlert();
+    hiddenAt=0;
+  }else{hiddenAt=Date.now();if(dirty)flush();}
 });
 setInterval(dayCheck,60000);
+setInterval(webTick,20000);
+document.addEventListener('pointerdown',unlockAudio,{once:true});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&alertOpen){alertOpen=false;renderModal();}});
+document.getElementById('modal').addEventListener('click',function(e){
+  var b=e.target.closest('[data-act]');if(!b)return;
+  var fn=ACTIONS[b.dataset.act];if(fn)fn(b);
+});
 
 /* ---------- início ---------- */
 (async function boot(){
   try{var h=(location.hash||'').slice(1);if(VIEWS[h])tab=h;}catch(e){}
   renderHead();
+  if(!NATIVE&&'serviceWorker' in navigator&&location.protocol!=='file:'){navigator.serviceWorker.register('./sw.js').catch(function(){});}
   if(!sb){
     /* Sem Supabase configurado: funciona só neste aparelho. */
     S=lsLoadKey(null)||defState();
     if(rollover())touch();
-    setSync('local');render();scheduleNotifs();
+    setSync('local');render();scheduleNotifs();setTimeout(maybeAlert,400);
     return;
   }
   setSync('out');render();

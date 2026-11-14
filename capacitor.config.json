@@ -7,7 +7,8 @@
   },
   "plugins": {
     "LocalNotifications": {
-      "iconColor": "#7d9bff"
+      "iconColor": "#7d9bff",
+      "smallIcon": "ic_stat_moon"
     }
   }
 }
