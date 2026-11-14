@@ -1,6 +1,7 @@
 // Rotina Noturna para Windows: abre o app web empacotado numa janela própria.
 // Ao fechar a janela, o app continua na bandeja do sistema para os avisos seguirem saindo.
-const { app, BrowserWindow, Tray, Menu, protocol, session, shell, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, protocol, session, shell, nativeImage, ipcMain } = require('electron');
+const { setupUpdater, consumeHiddenFlag } = require('./updater.cjs');
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -30,6 +31,8 @@ if (!app.requestSingleInstanceLock()) {
 let win = null;
 let tray = null;
 let quitting = false;
+let updater = { enabled: false, checkNow() {}, install() {}, state: () => ({}) };
+let startHidden = false;
 
 function showWin() {
   if (!win) return;
@@ -61,12 +64,14 @@ function createWindow() {
 
   win.loadURL('app://rotina/index.html');
   win.once('ready-to-show', () => {
-    if (!process.argv.includes('--hidden')) win.show();
+    if (!startHidden) win.show();
   });
   win.on('close', (e) => {
     if (!quitting) {
       e.preventDefault();
       win.hide();
+      // Janela indo para a bandeja é o bom momento de instalar uma atualização já baixada.
+      if (updater.state().ready) updater.install();
     }
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -81,24 +86,32 @@ function createWindow() {
   });
 }
 
+function buildMenu() {
+  const st = updater.state();
+  const upd = [];
+  if (st.ready) upd.push({ label: 'Instalar atualização ' + st.ready + ' e reiniciar', click: () => updater.install() });
+  else if (updater.enabled) upd.push({ label: st.checking ? 'Procurando atualização…' : 'Procurar atualização', enabled: !st.checking, click: () => updater.checkNow() });
+  return Menu.buildFromTemplate([
+    { label: 'Abrir Rotina Noturna', click: showWin },
+    { type: 'separator' },
+    ...upd,
+    {
+      label: 'Abrir com o Windows',
+      type: 'checkbox',
+      checked: app.getLoginItemSettings().openAtLogin,
+      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] })
+    },
+    { type: 'separator' },
+    { label: 'Versão ' + app.getVersion(), enabled: false },
+    { label: 'Sair', click: () => { quitting = true; app.quit(); } }
+  ]);
+}
+
 function createTray() {
   const img = nativeImage.createFromPath(ICON).resize({ width: 32, height: 32 });
   tray = new Tray(img);
   tray.setToolTip('Rotina Noturna');
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: 'Abrir Rotina Noturna', click: showWin },
-      { type: 'separator' },
-      {
-        label: 'Abrir com o Windows',
-        type: 'checkbox',
-        checked: app.getLoginItemSettings().openAtLogin,
-        click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] })
-      },
-      { type: 'separator' },
-      { label: 'Sair', click: () => { quitting = true; app.quit(); } }
-    ])
-  );
+  tray.setContextMenu(buildMenu());
   tray.on('click', showWin);
 }
 
@@ -129,6 +142,18 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'notifications');
 
   ipcMain.on('show', showWin);
+  startHidden = process.argv.includes('--hidden') || consumeHiddenFlag(app);
+  updater = setupUpdater({
+    app,
+    notify: (title, body, onClick) => {
+      if (!Notification.isSupported()) return;
+      const n = new Notification({ title, body, icon: ICON });
+      n.on('click', onClick);
+      n.show();
+    },
+    beforeInstall: () => { quitting = true; },
+    onChange: () => { if (tray) tray.setContextMenu(buildMenu()); }
+  });
   createWindow();
   createTray();
 });

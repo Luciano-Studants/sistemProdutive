@@ -2,6 +2,7 @@ import './style.css';
 import { createClient } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { BUILD, otaEnabled, markReady, checkUpdate, applyNow } from './ota.js';
 import { LEAD, ROUTINE, KIND_LABEL, buildPlan, dueNow, alertItems, fmtDue } from './plan.js';
 
 (function(){
@@ -228,8 +229,32 @@ function viewSettings(){
       '<label class="btn ghost filebtn" for="imp-file">Importar backup</label><input id="imp-file" type="file" accept="application/json" data-field="import" hidden></div>';
   }
   if(importMsg)h+='<p class="note">'+esc(importMsg)+'</p>';
+  if(NATIVE&&otaEnabled()){
+    h+='<div class="drow"><div class="dmain"><span>Atualizações do app</span><span class="due">Versão '+BUILD+'. O app procura sozinho e baixa só o que mudou; a troca acontece quando você sair do app e voltar.</span></div>'+
+      '<button class="st" data-act="otacheck">Procurar</button></div>';
+    if(otaMsg)h+='<p class="note">'+esc(otaMsg)+'</p>';
+  }
   if(session)h+='<div class="tools"><button class="btn ghost" data-act="logout">Sair da conta</button></div>';
   return h+'</section>';
+}
+
+/* ---------- atualização do código (APK) ---------- */
+var otaMsg='',otaLast=0;
+function otaBanner(v){
+  var el=document.getElementById('ota');if(!el)return;
+  if(!v){el.hidden=true;return;}
+  el.innerHTML='<span>Atualização '+v+' baixada.</span><button class="btn" data-act="otaapply">Aplicar agora</button>';
+  el.hidden=false;
+}
+async function otaRun(manual){
+  if(!NATIVE||!otaEnabled())return;
+  otaLast=Date.now();
+  var r=await checkUpdate();
+  if(r.state==='ready'){otaMsg='Atualização '+r.version+' baixada. Ela entra quando você sair do app e voltar, ou toque em Aplicar agora.';otaBanner(r.version);}
+  else if(r.state==='reinstall')otaMsg='Há uma versão nova que precisa instalar o APK de novo (baixe em Releases).';
+  else if(r.state==='current')otaMsg='Você já está na versão mais recente ('+r.version+').';
+  else otaMsg=manual?'Não consegui procurar agora. Verifique a internet.':'';
+  if(manual&&tab==='habitos')render();
 }
 
 /* ---------- avisos: itens, celular, web e popup ---------- */
@@ -728,6 +753,8 @@ var ACTIONS={
     if(perm==='granted'){setPush(true);webTick();}
     render();
   },
+  otacheck:function(){otaMsg='Procurando…';if(tab==='habitos')render();otaRun(true);},
+  otaapply:function(){applyNow();},
   ntest:async function(){
     var p={title:'Teste de aviso',body:'Se você ouviu o som e sentiu a vibração, os avisos estão funcionando.'};
     if(NATIVE){
@@ -835,6 +862,7 @@ function dayCheck(){
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState==='visible'){
     dayCheck();pullNow();scheduleNotifs();webTick();
+    if(NATIVE&&Date.now()-otaLast>30*60000)otaRun(false);
     if(hiddenAt&&Date.now()-hiddenAt>10*60000)maybeAlert();
     hiddenAt=0;
   }else{hiddenAt=Date.now();if(dirty)flush();}
@@ -843,6 +871,10 @@ setInterval(dayCheck,60000);
 setInterval(webTick,20000);
 document.addEventListener('pointerdown',unlockAudio,{once:true});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&alertOpen){alertOpen=false;renderModal();}});
+document.getElementById('ota').addEventListener('click',function(e){
+  var b=e.target.closest('[data-act]');if(!b)return;
+  var fn=ACTIONS[b.dataset.act];if(fn)fn(b);
+});
 document.getElementById('modal').addEventListener('click',function(e){
   var b=e.target.closest('[data-act]');if(!b)return;
   var fn=ACTIONS[b.dataset.act];if(fn)fn(b);
@@ -852,6 +884,7 @@ document.getElementById('modal').addEventListener('click',function(e){
 (async function boot(){
   try{var h=(location.hash||'').slice(1);if(VIEWS[h])tab=h;}catch(e){}
   renderHead();
+  if(NATIVE){markReady();setTimeout(function(){otaRun(false);},4000);}
   if(!NATIVE&&!DESKTOP&&'serviceWorker' in navigator&&location.protocol!=='file:'){navigator.serviceWorker.register('./sw.js').catch(function(){});}
   if(!sb){
     /* Sem Supabase configurado: funciona só neste aparelho. */

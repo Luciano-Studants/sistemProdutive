@@ -4,14 +4,17 @@
 import { readFileSync, writeFileSync, cpSync, existsSync, rmSync } from 'node:fs';
 
 const run = Number(process.env.RUN_NUMBER || '1');
+// O primeiro número da versão é a "geração nativa": sobe só quando o APK precisa ser reinstalado
+// (plugin novo, permissão nova). O app usa isso para não aplicar pacotes incompatíveis.
+const nativeApi = JSON.parse(readFileSync('package.json', 'utf8')).nativeApi || 1;
 const file = 'android/app/build.gradle';
 let g = readFileSync(file, 'utf8');
 
 if (!/versionCode \d+/.test(g)) throw new Error('versionCode não encontrado em ' + file);
 g = g.replace(/versionCode \d+/, `versionCode ${run}`);
-g = g.replace(/versionName "[^"]*"/, `versionName "1.0.${run}"`);
+g = g.replace(/versionName "[^"]*"/, `versionName "${nativeApi}.0.${run}"`);
 writeFileSync(file, g);
-console.log(`Android: versionCode ${run}, versionName 1.0.${run}`);
+console.log(`Android: versionCode ${run}, versionName ${nativeApi}.0.${run}`);
 
 const res = 'android/app/src/main/res';
 cpSync('android-res', res, { recursive: true });

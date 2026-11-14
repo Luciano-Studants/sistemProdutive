@@ -17,6 +17,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # o número da versão é a contagem de commits
 
       - uses: actions/setup-node@v4
         with:
@@ -26,14 +28,28 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      - name: Número da versão
+        shell: bash
+        run: |
+          echo "BUILD=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+          echo "VERSION=1.0.$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+
       - name: Gerar a versão web
         run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
+      # O endereço de atualização aponta para a própria página de Releases (tag "windows").
       - name: Gerar o instalador
-        run: npx electron-builder --win --publish never
+        shell: bash
+        run: |
+          npx electron-builder --win --publish never \
+            -c.extraMetadata.version="$VERSION" \
+            -c.publish.provider=generic \
+            -c.publish.url="https://github.com/${{ github.repository }}/releases/download/windows"
+          node scripts/make-latest-yml.mjs "$VERSION" "release/Rotina-Noturna-Setup-$VERSION.exe"
+          ls -la release
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
@@ -41,14 +57,26 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rotina-noturna-windows
-          path: release/Rotina-Noturna-Setup.exe
+          path: release/Rotina-Noturna-Setup-${{ env.VERSION }}.exe
 
+      # A página "windows" não é mais apagada: o app instalado precisa do instalador e do
+      # .blockmap da versão anterior para baixar só a diferença. Ficam as 3 últimas versões.
       - name: Publicar na página de Releases
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete windows --yes --cleanup-tag || true
-          gh release create windows release/Rotina-Noturna-Setup.exe \
-            --title "Rotina Noturna para Windows (build ${{ github.run_number }})" \
-            --notes "Instalador gerado automaticamente a partir do commit ${GITHUB_SHA::7}. Baixe e execute. O Windows pode mostrar o aviso do SmartScreen porque o instalador não é assinado: clique em Mais informações e depois em Executar assim mesmo."
+          EXE="Rotina-Noturna-Setup-$VERSION.exe"
+          if ! gh release view windows >/dev/null 2>&1; then
+            gh release create windows --title "Rotina Noturna para Windows" --notes "x"
+          fi
+          gh release edit windows --title "Rotina Noturna para Windows (versão $VERSION)" \
+            --notes "Baixe Rotina-Noturna-Setup.exe só na primeira vez. Depois o app se atualiza sozinho. O Windows pode mostrar o aviso do SmartScreen porque o instalador não é assinado: clique em Mais informações e depois em Executar assim mesmo."
+          cp "release/$EXE" release/Rotina-Noturna-Setup.exe
+          gh release upload windows "release/$EXE" "release/$EXE.blockmap" release/Rotina-Noturna-Setup.exe release/latest.yml --clobber
+          gh release view windows --json assets -q '.assets[].name' \
+            | grep -E '^Rotina-Noturna-Setup-[0-9.]+\.exe$' | sort -V | head -n -3 \
+            | while read -r old; do
+                gh release delete-asset windows "$old" --yes || true
+                gh release delete-asset windows "$old.blockmap" --yes || true
+              done

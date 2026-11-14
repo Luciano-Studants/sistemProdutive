@@ -16,6 +16,7 @@
     "@capacitor/cli": "^7.4.0",
     "@capacitor/core": "^7.4.0",
     "@capacitor/local-notifications": "^7.0.0",
+    "@capgo/capacitor-updater": "^7.53.0",
     "@supabase/supabase-js": "^2.45.0",
     "electron": "44.10.0",
     "electron-builder": "26.18.0",
@@ -46,13 +47,22 @@
         }
       ],
       "icon": "build/icon.png",
-      "artifactName": "Rotina-Noturna-Setup.${ext}"
+      "artifactName": "Rotina-Noturna-Setup-${version}.${ext}",
+      "electronLanguages": [
+        "pt-BR",
+        "en-US"
+      ]
     },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
       "deleteAppDataOnUninstall": false,
       "shortcutName": "Rotina Noturna"
-    }
-  }
+    },
+    "compression": "maximum"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  },
+  "nativeApi": 1
 }

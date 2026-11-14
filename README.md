@@ -42,14 +42,17 @@ No repositório: **Settings > Secrets and variables > Actions > New repository s
 **Settings > Pages > Build and deployment > Source: GitHub Actions.** O endereço aparece ao fim do primeiro workflow "Publicar versão web". (Pages em repositório privado exige plano pago do GitHub. Repositório público funciona de graça.)
 
 ### 4. APK no celular
-O workflow **Gerar APK** roda a cada commit no `main`. Abra a página **Releases** do repositório pelo celular, baixe `rotina-noturna.apk` e instale (o Android pede para permitir instalar de fonte externa). As atualizações seguintes instalam por cima, sem perder dados.
+O workflow **Gerar APK** roda a cada commit no `main`. Abra a página **Releases** do repositório pelo celular, baixe `rotina-noturna.apk` e instale (o Android pede para permitir instalar de fonte externa). As atualizações seguintes **não precisam de novo download**: o app procura sozinho (ao abrir e ao voltar para ele), baixa só o código novo (algumas centenas de KB, do GitHub Pages) e troca quando você sai do app e volta. Em Hábitos > Ajustes há o botão **Procurar** e a versão em uso. Se um pacote novo não abrir, o app volta sozinho para o anterior.
+- Só é preciso instalar o APK de novo quando muda algo nativo (plugin novo, permissão, ícone). Nesse caso suba o número `nativeApi` no `package.json`; o app avisa que precisa reinstalar.
+- Depende do **GitHub Pages** estar ativo (o pacote fica em `.../update/`).
 
 ### 5. Programa para Windows (.exe)
 O workflow **Gerar instalador Windows** roda a cada commit no `main` (e pode ser rodado à mão em Actions). Abra a página **Releases** do repositório, entre na versão **windows**, baixe `Rotina-Noturna-Setup.exe` e execute. A instalação é só para o seu usuário, sem pedir administrador.
 - O instalador não é assinado digitalmente (certificado é pago). O Windows mostra o aviso do SmartScreen: clique em **Mais informações** e depois em **Executar assim mesmo**.
 - Ao fechar a janela, o app continua na bandeja do sistema (perto do relógio) e os avisos seguem saindo. Clique com o botão direito no ícone para **Abrir com o Windows** ou **Sair** de vez.
 - Os dados são os mesmos do celular e da web, pela mesma conta. O programa guarda uma cópia local e abre sem internet.
-- Para atualizar, baixe e execute o instalador novo, que substitui o anterior sem perder dados.
+- **Atualização automática:** a partir desta versão o app procura atualização ao abrir e a cada 4 horas, baixa só a diferença e instala quando você fecha a janela para a bandeja (ou pelo menu da bandeja, ou clicando no aviso). Quem instalou uma versão anterior precisa baixar o instalador novo uma única vez.
+- Em Releases ficam as 3 últimas versões (necessário para baixar só a diferença).
 
 ## Atualizar o app
 Qualquer commit no `main` atualiza a versão web e gera um APK e um instalador Windows novos em cerca de 5 a 8 minutos.

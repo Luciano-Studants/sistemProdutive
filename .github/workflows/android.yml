@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # o número da versão é a contagem de commits
 
       - uses: actions/setup-node@v4
         with:
@@ -33,11 +35,19 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
 
+      - name: Número da versão e endereço das atualizações
+        run: |
+          echo "BUILD=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "UPDATE_URL=https://${OWNER}.github.io/${{ github.event.repository.name }}/update/" >> "$GITHUB_ENV"
+
       - name: Gerar a versão web
         run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_BUILD: ${{ env.BUILD }}
+          VITE_UPDATE_URL: ${{ env.UPDATE_URL }}
 
       - name: Criar projeto Android
         run: |

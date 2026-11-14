@@ -9,6 +9,11 @@
     "LocalNotifications": {
       "iconColor": "#7d9bff",
       "smallIcon": "ic_stat_moon"
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "statsUrl": "",
+      "appReadyTimeout": 15000
     }
   }
 }
