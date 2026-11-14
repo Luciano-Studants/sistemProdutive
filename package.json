@@ -7,16 +7,52 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "android:sync": "vite build && cap sync android"
-  },
-  "dependencies": {
-    "@capacitor/android": "^7.4.0",
-    "@capacitor/core": "^7.4.0",
-    "@capacitor/local-notifications": "^7.0.0",
-    "@supabase/supabase-js": "^2.45.0"
+    "android:sync": "vite build && cap sync android",
+    "desktop": "vite build && electron .",
+    "dist:win": "vite build && electron-builder --win --publish never"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.4.0",
     "@capacitor/cli": "^7.4.0",
+    "@capacitor/core": "^7.4.0",
+    "@capacitor/local-notifications": "^7.0.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "electron": "44.10.0",
+    "electron-builder": "26.18.0",
     "vite": "^6.0.0"
+  },
+  "description": "Agenda diária, tarefas, faculdade, estudos, projetos e hábitos (web, Android e Windows).",
+  "author": "Luciano-Studants",
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.rotinanoturna.app",
+    "productName": "Rotina Noturna",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "Rotina-Noturna-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "Rotina Noturna"
+    }
   }
 }

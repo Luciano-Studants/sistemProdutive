@@ -106,6 +106,7 @@ var SB_URL=import.meta.env.VITE_SUPABASE_URL||'',SB_KEY=import.meta.env.VITE_SUP
 var sb=(SB_URL&&SB_KEY)?createClient(SB_URL,SB_KEY):null;
 var session=null,userId=null,chan=null,authMsg='',authEmail='',importMsg='';
 var NATIVE=Capacitor.isNativePlatform();
+var DESKTOP=!NATIVE&&!!window.rotinaDesktop;
 
 function lsKeyFor(id){return 'rotina-noturna-v2:'+(id||'local');}
 function lsLoadKey(id){try{var r=localStorage.getItem(lsKeyFor(id));if(r)return normalize(JSON.parse(r));}catch(e){}return null;}
@@ -216,7 +217,8 @@ function viewSettings(){
     var active=on&&(NATIVE||Notification.permission==='granted');
     h+='<div class="drow"><div class="dmain"><span>Avisos com som'+(NATIVE?' e vibração':' neste navegador')+'</span><span class="due">'+rules+'</span></div>'+
       '<button class="st'+(active?' s2':'')+'" data-act="notif" aria-pressed="'+active+'">'+(active?'Ligados':'Desligados')+'</button></div>';
-    if(!NATIVE)h+='<p class="hint">Na web os avisos saem enquanto o app ou a aba estiver aberto, mesmo minimizado. Para ser avisado com o app fechado, use o app do celular.</p>';
+    if(DESKTOP)h+='<p class="hint">No Windows o app continua na bandeja do sistema (perto do relógio) quando você fecha a janela, e os avisos seguem saindo. Clique com o botão direito no ícone da bandeja para abrir com o Windows ou sair de vez.</p>';
+    else if(!NATIVE)h+='<p class="hint">Na web os avisos saem enquanto o app ou a aba estiver aberto, mesmo minimizado. Para ser avisado com o app fechado, use o app do celular.</p>';
     if(!NATIVE&&Notification.permission==='denied')h+='<p class="note">O navegador bloqueou as notificações deste site. Libere no cadeado ao lado do endereço e ligue de novo.</p>';
     if(active)h+='<div class="tools"><button class="btn ghost" data-act="ntest">Testar aviso</button></div>';
   }else h+='<p class="hint">Este navegador não oferece notificações.</p>';
@@ -311,7 +313,7 @@ function beep(){
 }
 function showWeb(p,key){
   var opts={body:p.body,tag:key,icon:'icon-192.png'};
-  try{new Notification(p.title,opts);}
+  try{var n=new Notification(p.title,opts);n.onclick=function(){try{if(window.rotinaDesktop)window.rotinaDesktop.show();}catch(e){}window.focus();};}
   catch(e){try{navigator.serviceWorker.ready.then(function(r){r.showNotification(p.title,opts);});}catch(e2){}}
   beep();
 }
@@ -850,7 +852,7 @@ document.getElementById('modal').addEventListener('click',function(e){
 (async function boot(){
   try{var h=(location.hash||'').slice(1);if(VIEWS[h])tab=h;}catch(e){}
   renderHead();
-  if(!NATIVE&&'serviceWorker' in navigator&&location.protocol!=='file:'){navigator.serviceWorker.register('./sw.js').catch(function(){});}
+  if(!NATIVE&&!DESKTOP&&'serviceWorker' in navigator&&location.protocol!=='file:'){navigator.serviceWorker.register('./sw.js').catch(function(){});}
   if(!sb){
     /* Sem Supabase configurado: funciona só neste aparelho. */
     S=lsLoadKey(null)||defState();

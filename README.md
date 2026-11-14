@@ -1,13 +1,14 @@
 # Rotina Noturna
 
 Agenda diária (18h às 00h), tarefas, faculdade, estudos, projetos e hábitos.
-Uma só base de código gera a **versão web** (PC) e o **APK** (Android). Os dois usam a mesma conta e o mesmo banco no Supabase, então os dados são idênticos nos dois.
+Uma só base de código gera a **versão web**, o **APK** (Android) e o **instalador para Windows** (.exe). Os dois usam a mesma conta e o mesmo banco no Supabase, então os dados são idênticos nos dois.
 
 ```
 src/            código do app (HTML, CSS e JavaScript)
 supabase/       schema.sql, o banco de dados
 .github/        workflows que geram o APK e publicam a versão web a cada commit
 android-keystore/  chave fixa de assinatura do APK (permite atualizar por cima)
+electron/       programa de Windows (janela, bandeja do sistema)
 ```
 
 ## Como funciona
@@ -43,8 +44,15 @@ No repositório: **Settings > Secrets and variables > Actions > New repository s
 ### 4. APK no celular
 O workflow **Gerar APK** roda a cada commit no `main`. Abra a página **Releases** do repositório pelo celular, baixe `rotina-noturna.apk` e instale (o Android pede para permitir instalar de fonte externa). As atualizações seguintes instalam por cima, sem perder dados.
 
+### 5. Programa para Windows (.exe)
+O workflow **Gerar instalador Windows** roda a cada commit no `main` (e pode ser rodado à mão em Actions). Abra a página **Releases** do repositório, entre na versão **windows**, baixe `Rotina-Noturna-Setup.exe` e execute. A instalação é só para o seu usuário, sem pedir administrador.
+- O instalador não é assinado digitalmente (certificado é pago). O Windows mostra o aviso do SmartScreen: clique em **Mais informações** e depois em **Executar assim mesmo**.
+- Ao fechar a janela, o app continua na bandeja do sistema (perto do relógio) e os avisos seguem saindo. Clique com o botão direito no ícone para **Abrir com o Windows** ou **Sair** de vez.
+- Os dados são os mesmos do celular e da web, pela mesma conta. O programa guarda uma cópia local e abre sem internet.
+- Para atualizar, baixe e execute o instalador novo, que substitui o anterior sem perder dados.
+
 ## Atualizar o app
-Qualquer commit no `main` atualiza a versão web e gera um APK novo em cerca de 5 a 8 minutos.
+Qualquer commit no `main` atualiza a versão web e gera um APK e um instalador Windows novos em cerca de 5 a 8 minutos.
 
 ## Rodar no PC para desenvolver
 ```
@@ -53,3 +61,5 @@ npm install
 npm run dev
 ```
 Sem o `.env`, o app funciona só no aparelho, sem login.
+
+Para abrir a versão Windows durante o desenvolvimento: `npm run desktop`.
