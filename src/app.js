@@ -30,11 +30,11 @@ var TABS=[
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function pad(n){return String(n).padStart(2,'0');}
 function ymd(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
-function parse(k){var p=k.split('-').map(Number);return new Date(p[0],p[1]-1,p[2]);}
+function parse(k){var p=String(k).split('-').map(Number);return new Date(p[0],p[1]-1,p[2]);}
 function todayKey(){return ymd(new Date());}
 function addDays(k,n){var d=parse(k);d.setDate(d.getDate()+n);return ymd(d);}
 function diffDays(a,b){return Math.round((parse(a)-parse(b))/86400000);}
-function shortD(k){var p=k.split('-');return p[2]+'/'+p[1];}
+function shortD(k){var p=String(k||'').split('-');if(p.length<3)return '—';return p[2]+'/'+p[1];}
 function uid(){return Math.random().toString(36).slice(2,8)+Date.now().toString(36).slice(-4);}
 function clone(o){return JSON.parse(JSON.stringify(o));}
 function fmtMin(m){m=Math.round(m||0);if(m<60)return m+' min';var h=Math.floor(m/60),r=m%60;return h+'h'+(r?pad(r):'');}
@@ -771,13 +771,14 @@ function habGoalText(h,key){
 }
 function timeDiffText(planned,actual){
   var d=HB.timeDiff(planned,actual);
+  if(d==null)return '';
   return d===0?'no horário':(d>0?'+':'−')+Math.abs(d)+' min';
 }
 /* Resumo do dia de hoje: texto, % da barra e cor. */
 function habToday(h){
   var k=todayKey(),v=HB.dayValue(h,k,S),g=HB.cfgAt(h,k).goal;
   if(v==null)return {txt:'sem registro hoje',pct:0,cls:''};
-  if(g.type==='time')return {txt:'registrado '+v+(g.time?' · '+timeDiffText(g.time,v)+' do planejado':''),pct:100,cls:'ok'};
+  if(g.type==='time')return {txt:'registrado '+v+(timeDiffText(g.time,v)?' · '+timeDiffText(g.time,v)+' do planejado':''),pct:100,cls:'ok'};
   var txt=g.type==='duration'?fmtMin(v):fmtNum(v)+' '+(g.unit||'vezes');
   if(g.value==null)return {txt:txt+' hoje',pct:100,cls:''};
   var pct=Math.min(100,Math.round(v/g.value*100));
@@ -915,7 +916,7 @@ function habHistRow(h,k,t){
   var stx=done?'cumprido':(part?(h.link==='screen'?'acima da meta':'incompleto'):(k<t&&sched?'sem registro':(sched?'pendente':'fora do programa')));
   var val='';
   if(v!=null){
-    if(g.type==='time')val=v+(g.time?' · '+timeDiffText(g.time,v):'');
+    if(g.type==='time')val=v+(timeDiffText(g.time,v)?' · '+timeDiffText(g.time,v):'');
     else if(g.type==='duration')val=fmtMin(v);
     else val=fmtNum(v)+' '+(g.unit||'vezes');
   }

@@ -63,8 +63,10 @@ export function isFinished(h, today) {
 }
 
 /* ---------- valores do dia ---------- */
+export const isTime = (v) => typeof v === 'string' && /^\d{2}:\d{2}$/.test(v);
 export function timeDiff(planned, actual) {
-  // diferença em minutos, circular: planejado 23:00 e real 00:30 dá +90
+  // diferença em minutos, circular: planejado 23:00 e real 00:30 dá +90. Valor inválido: null.
+  if (!isTime(planned) || !isTime(actual)) return null;
   const m = (t) => { const p = t.split(':').map(Number); return p[0] * 60 + p[1]; };
   return ((m(actual) - m(planned) + 720 + 1440) % 1440) - 720;
 }
@@ -79,8 +81,13 @@ export function dayValue(h, key, S) {
   const items = logsOf(h, key);
   if (!items.length) return null;
   const type = cfgAt(h, key).goal.type;
-  if (type === 'time') return items[items.length - 1].v;
-  return items.reduce((a, x) => a + (Number(x.v) || 0), 0);
+  // Registro de outro tipo (hábito que mudou de horário para quantidade, ou o contrário) é ignorado.
+  if (type === 'time') {
+    const t = items.filter((x) => isTime(x && x.v));
+    return t.length ? t[t.length - 1].v : null;
+  }
+  const n = items.filter((x) => x && (typeof x.v === 'number' || (typeof x.v === 'string' && x.v !== '' && !isNaN(Number(x.v)))) && isFinite(Number(x.v)));
+  return n.length ? n.reduce((a, x) => a + Number(x.v), 0) : null;
 }
 /* Dia cumprido. Tempo de tela é limite (no máximo a meta); os demais, no mínimo a meta.
    Sem meta preenchida, qualquer registro conta, e nunca vira "meta zero". */
