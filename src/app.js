@@ -261,7 +261,7 @@ async function otaRun(manual){
   if(r.state==='ready'){otaMsg='Atualização '+r.version+' baixada. Ela entra quando você sair do app e voltar, ou toque em Aplicar agora.';otaBanner(r.version);}
   else if(r.state==='reinstall')otaMsg='Há uma versão nova que precisa instalar o APK de novo (baixe em Releases).';
   else if(r.state==='current')otaMsg='Você já está na versão mais recente ('+r.version+').';
-  else otaMsg=manual?'Não consegui procurar agora. Verifique a internet.':'';
+  else otaMsg=manual?(r.step==='download'?'Achei uma atualização, mas o download falhou: ':'Não consegui consultar o servidor de atualizações: ')+r.why:'';
   if(manual&&tab==='habitos')render();
 }
 

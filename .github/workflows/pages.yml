@@ -46,7 +46,9 @@ jobs:
           mkdir -p update
           (cd dist && zip -qr "../update/bundle-${BUILD}.zip" .)
           mv update dist/update
-          printf '{"version":%s,"zip":"bundle-%s.zip","nativeApi":%s}\n' "$BUILD" "$BUILD" "$NATIVE_API" > dist/update/version.json
+          # O plugin do app exige o SHA-256 do zip (hex minúsculo) para aceitar o pacote.
+          SUM=$(sha256sum "dist/update/bundle-${BUILD}.zip" | cut -d' ' -f1)
+          printf '{"version":%s,"zip":"bundle-%s.zip","nativeApi":%s,"checksum":"%s"}\n' "$BUILD" "$BUILD" "$NATIVE_API" "$SUM" > dist/update/version.json
           cat dist/update/version.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

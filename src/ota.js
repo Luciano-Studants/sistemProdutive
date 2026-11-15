@@ -16,7 +16,7 @@ export function otaEnabled() {
 /* Compara a versão do pacote em uso com a do servidor. Funções puras ficam fora do plugin
    para poderem ser testadas. */
 export function decide(remote, localBuild, nativeApi) {
-  if (!remote || typeof remote.version !== 'number' || !remote.zip) return { act: 'none', why: 'invalid' };
+  if (!remote || typeof remote.version !== 'number' || !remote.zip || !/^[0-9a-f]{64}$/.test(remote.checksum || '')) return { act: 'none', why: 'invalid' };
   if (remote.version <= localBuild) return { act: 'none', why: 'current' };
   if ((remote.nativeApi || 1) > nativeApi) return { act: 'reinstall', why: 'native' };
   return { act: 'download' };
@@ -43,24 +43,33 @@ let pending = null; // pacote baixado e pronto para aplicar
 
 export function pendingUpdate() { return pending; }
 
-/* Retorna { state: 'current'|'ready'|'reinstall'|'error', version? } */
+/* Retorna { state: 'current'|'ready'|'reinstall'|'error', version?, step?, why? }
+   step diz onde falhou: 'check' (consultar o servidor) ou 'download' (baixar o pacote). */
 export async function checkUpdate() {
-  if (!otaEnabled()) return { state: 'error', why: 'off' };
+  if (!otaEnabled()) return { state: 'error', step: 'check', why: 'atualizações desligadas neste build' };
   if (pending) return { state: 'ready', version: pending.version };
+  const msg = (e) => String((e && e.message) || e).slice(0, 140);
+  let remote;
   try {
     const r = await fetch(BASE + 'version.json?t=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) throw new Error('http ' + r.status);
-    const remote = await r.json();
+    if (!r.ok) throw new Error('servidor respondeu ' + r.status);
+    remote = await r.json();
+  } catch (e) {
+    return { state: 'error', step: 'check', why: msg(e) };
+  }
+  try {
     const cur = await currentBuild();
     const d = decide(remote, cur.build, cur.nativeApi);
+    if (d.why === 'invalid') return { state: 'error', step: 'check', why: 'arquivo de versão incompleto no servidor' };
     if (d.act === 'reinstall') return { state: 'reinstall', version: remote.version };
     if (d.act !== 'download') return { state: 'current', version: cur.build };
-    const b = await CapacitorUpdater.download({ url: BASE + remote.zip, version: String(remote.version) });
+    // O plugin exige o SHA-256 do zip e confere antes de aceitar o pacote.
+    const b = await CapacitorUpdater.download({ url: BASE + remote.zip, version: String(remote.version), checksum: remote.checksum });
     await CapacitorUpdater.next({ id: b.id });
     pending = { id: b.id, version: remote.version };
     return { state: 'ready', version: remote.version };
   } catch (e) {
-    return { state: 'error', why: String(e && e.message || e) };
+    return { state: 'error', step: 'download', why: msg(e) };
   }
 }
 
