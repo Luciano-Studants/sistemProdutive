@@ -54,6 +54,12 @@ O workflow **Gerar instalador Windows** roda a cada commit no `main` (e pode ser
 - **Atualização automática:** a partir desta versão o app procura atualização ao abrir e a cada 4 horas, baixa só a diferença e instala quando você fecha a janela para a bandeja (ou pelo menu da bandeja, ou clicando no aviso). Quem instalou uma versão anterior precisa baixar o instalador novo uma única vez.
 - Em Releases ficam as 3 últimas versões (necessário para baixar só a diferença).
 
+## Recursos principais
+- **Hoje > Pomodoro:** você escolhe o tempo total de estudo e o foco (25 ou 50 min); o app calcula as pausas (5 min entre focos de 25 e 15 min a cada 4; 10 e 30 min para focos de 50). Só os focos concluídos somam minutos.
+- **Faculdade:** estante com pastas por curso, matérias dentro e disciplinas marcáveis. Entregas continuam abaixo, com os mesmos avisos.
+- **Projetos:** ramos próprios (além de Desenvolvimento e Design), salvos na conta.
+- **Hábitos:** cadastro com frequência (dias ou vezes por semana), período, meta (duração, quantidade ou horário), lembrete e data de término; modelos de tempo de tela, água, acordar e dormir; detalhes com histórico, taxa de cumprimento e evolução semanal e mensal. Mudar a meta vale daqui para frente e não altera dias passados.
+
 ## Atualizar o app
 Qualquer commit no `main` atualiza a versão web e gera um APK e um instalador Windows novos em cerca de 5 a 8 minutos.
 

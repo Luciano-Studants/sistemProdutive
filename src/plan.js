@@ -11,7 +11,7 @@ export const ROUTINE = [
   { id: 105, h: 23, m: 0, t: 'Hora de desacelerar', b: 'Sem telas estimulantes. Durma cedo.' }
 ];
 
-export const KIND_LABEL = { dl: 'Entrega', step: 'Etapa', ev: 'Compromisso', task: 'Tarefa' };
+export const KIND_LABEL = { dl: 'Entrega', step: 'Etapa', ev: 'Compromisso', task: 'Tarefa', hab: 'Hábito' };
 
 const pad = (n) => String(n).padStart(2, '0');
 const TIME_RE = /^\d{2}:\d{2}$/;
@@ -61,6 +61,13 @@ export function planItem(it) {
   const body = (it.sub ? it.sub + ': ' : '') + it.title;
   const hasTime = TIME_RE.test(it.time || '');
   const tail = hasTime ? ' às ' + it.time : '';
+
+  if (it.kind === 'hab') { // lembrete de hábito: um aviso, na hora configurada
+    if (!hasTime) return out;
+    const [h, m] = hm(it.time);
+    out.push({ at: at(it.date, 0, h, m), title: 'Hábito: ' + it.title, body: 'Hora de registrar. Toque para abrir o app.' });
+    return out;
+  }
 
   if (it.kind === 'task') {
     if (!hasTime) return out;
@@ -132,7 +139,7 @@ export function dueNow(items, now, windowMs) {
 export function alertItems(items, today) {
   const out = [];
   items.forEach((it) => {
-    if (it.kind === 'task') return;
+    if (it.kind === 'task' || it.kind === 'hab') return;
     const n = diffDays(it.date, today);
     if (n < 0 && !it.overdue) return;
     if (n > LEAD) return;
