@@ -78,3 +78,8 @@ export async function applyNow() {
   if (!pending) return;
   await CapacitorUpdater.set({ id: pending.id });
 }
+
+/* Descarta o pacote baixado e volta ao código que veio dentro do APK. */
+export async function resetToBuiltin() {
+  try { await CapacitorUpdater.reset({ toLastSuccessful: false }); } catch (e) { /* plugin ausente */ }
+}

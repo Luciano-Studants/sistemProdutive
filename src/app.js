@@ -2,7 +2,7 @@ import './style.css';
 import { createClient } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { BUILD, otaEnabled, markReady, checkUpdate, applyNow } from './ota.js';
+import { BUILD, otaEnabled, markReady, checkUpdate, applyNow, resetToBuiltin } from './ota.js';
 import * as HB from './habits.js';
 import { LEAD, ROUTINE, KIND_LABEL, buildPlan, dueNow, alertItems, fmtDue } from './plan.js';
 
@@ -61,12 +61,41 @@ function defState(){
     projects:[],ideas:[],days:{},screenGoal:120,notif:{on:false},
     courses:[],habits:[],branches:[{id:'dev',name:'Desenvolvimento'},{id:'design',name:'Design'}],pomo:{total:120,focus:25}};
 }
+/* Completa qualquer campo que falte num hábito, para um registro incompleto nunca derrubar a tela. */
+var RE_DAY=/^\d{4}-\d{2}-\d{2}$/;
+function fixHabit(h){
+  var f=h.freq&&typeof h.freq==='object'?h.freq:{},g=h.goal&&typeof h.goal==='object'?h.goal:{},e=h.end&&typeof h.end==='object'?h.end:{},r=h.remind&&typeof h.remind==='object'?h.remind:{};
+  h.name=String(h.name||'Hábito');h.desc=String(h.desc||'');h.icon=String(h.icon||'⭐');h.cat=String(h.cat||'Outros');
+  h.start=RE_DAY.test(h.start||'')?h.start:todayKey();
+  h.paused=!!h.paused;h.link=h.link==='screen'?'screen':'';h.tpl=String(h.tpl||'');
+  h.freq={mode:f.mode==='week'?'week':'days',days:Array.isArray(f.days)?f.days.filter(function(d){return d>=0&&d<=6;}):[0,1,2,3,4,5,6],perWeek:f.perWeek>=1&&f.perWeek<=7?Math.round(f.perWeek):3};
+  h.period=['any','morning','afternoon','night'].indexOf(h.period)>=0?h.period:'any';
+  h.goal={type:['duration','count','time'].indexOf(g.type)>=0?g.type:'count',value:typeof g.value==='number'&&g.value>0?g.value:null,unit:String(g.unit||''),time:/^\d{2}:\d{2}$/.test(g.time||'')?g.time:''};
+  if(h.link==='screen')h.goal.type='duration';
+  h.remind={on:!!r.on&&/^\d{2}:\d{2}$/.test(r.time||''),time:/^\d{2}:\d{2}$/.test(r.time||'')?r.time:''};
+  var em=['none','date','days'].indexOf(e.mode)>=0?e.mode:'none';
+  h.end={mode:em,date:RE_DAY.test(e.date||'')?e.date:'',days:e.days>=1&&e.days<=3660?Math.round(e.days):null};
+  if(em==='date'&&!h.end.date)h.end.mode='none';
+  if(em==='days'&&!h.end.days)h.end.mode='none';
+  if(!h.logs||typeof h.logs!=='object'||Array.isArray(h.logs))h.logs={};
+  Object.keys(h.logs).forEach(function(k){if(!RE_DAY.test(k)||!Array.isArray(h.logs[k]))delete h.logs[k];});
+  var hist=Array.isArray(h.hist)?h.hist.filter(function(x){return x&&RE_DAY.test(x.from||'')&&x.goal&&x.freq&&Array.isArray(x.freq.days);}):[];
+  h.hist=hist.length?hist:[{from:h.start,goal:h.goal,freq:h.freq}];
+  return h;
+}
 function normalize(r){
   var d=defState(),s=Object.assign(d,r||{});
   ['tasks','deadlines','events','subjects','projects','ideas'].forEach(function(k){if(!Array.isArray(s[k]))s[k]=[];});
   ['courses','habits','branches'].forEach(function(k){if(!Array.isArray(s[k]))s[k]=defState()[k];});
-  s.courses.forEach(function(c){if(!Array.isArray(c.mats))c.mats=[];c.mats.forEach(function(m){if(!Array.isArray(m.discs))m.discs=[];});});
-  s.habits.forEach(function(h){if(!h.logs||typeof h.logs!=='object')h.logs={};});
+  var okObj=function(x){return x&&typeof x==='object'&&x.id;};
+  s.courses=s.courses.filter(okObj);
+  s.courses.forEach(function(c){
+    c.name=String(c.name||'Curso');
+    c.mats=(Array.isArray(c.mats)?c.mats:[]).filter(okObj);
+    c.mats.forEach(function(m){m.name=String(m.name||'Matéria');m.discs=(Array.isArray(m.discs)?m.discs:[]).filter(okObj);m.discs.forEach(function(x){x.name=String(x.name||'Disciplina');});});
+  });
+  s.habits=s.habits.filter(okObj).map(fixHabit);
+  s.branches=s.branches.filter(okObj);
   if(!s.pomo||typeof s.pomo!=='object')s.pomo={total:120,focus:25};
   if(s.pomo.focus!==50)s.pomo.focus=25;
   if(!(s.pomo.total>=10&&s.pomo.total<=720))s.pomo.total=120;
@@ -237,6 +266,7 @@ function viewSettings(){
       '<label class="btn ghost filebtn" for="imp-file">Importar backup</label><input id="imp-file" type="file" accept="application/json" data-field="import" hidden></div>';
   }
   if(importMsg)h+='<p class="note">'+esc(importMsg)+'</p>';
+  h+='<div class="drow"><div class="dmain"><span>Versão do app'+(BUILD?': '+BUILD:'')+'</span><span class="due">Se uma tela travar depois de uma atualização, limpe o cache: apaga cópias guardadas e recarrega'+(NATIVE?' e volta ao código do APK':'')+'.</span></div><button class="st" data-act="clearcache">Limpar cache</button></div>';
   if(NATIVE&&otaEnabled()){
     h+='<div class="drow"><div class="dmain"><span>Atualizações do app</span><span class="due">Versão '+BUILD+'. O app procura sozinho e baixa só o que mudou; a troca acontece quando você sair do app e voltar.</span></div>'+
       '<button class="st" data-act="otacheck">Procurar</button></div>';
@@ -925,8 +955,8 @@ function streak(){
   return n;
 }
 function viewHab(){
-  if(habMode==='form'&&habDraft)return habForm();
-  if(habMode==='detail'&&habFind(habDetailId))return habDetail();
+  if(habMode==='form'&&habDraft)return safeSection(habForm,'Hábito');
+  if(habMode==='detail'&&habFind(habDetailId))return safeSection(habDetail,'Hábito');
   var k=todayKey(),day=getDay(k),goal=S.screenGoal,keys=[],i;
   for(i=13;i>=0;i--)keys.push(addDays(k,-i));
   var vals=keys.map(function(key){var d=S.days[key];return d?d.screen:null;});
@@ -937,7 +967,7 @@ function viewHab(){
   }).join('');
   var fech=keys.filter(function(key){var d=S.days[key];return d&&d.blocks&&d.blocks.f&&d.blocks.f.done;}).length;
   var sn=streak(),scr=day.screen;
-  var h='<h2>Hábitos</h2>'+habSection()+'<section class="card"><h3>Menos telas e redes</h3>'+
+  var h='<h2>Hábitos</h2>'+safeSection(habSection,'Meus hábitos')+'<section class="card"><h3>Menos telas e redes</h3>'+
     '<div class="stats"><div class="stat"><span>Hoje</span><b class="'+(scr==null?'':(scr<=goal?'ok':'over'))+'">'+(scr==null?'—':fmtMin(scr))+'</b></div>'+
     '<div class="stat"><span>Meta diária</span><b>'+fmtMin(goal)+'</b></div>'+
     '<div class="stat"><span>Sequência</span><b>'+sn+'<small> '+(sn===1?'dia':'dias')+'</small></b></div></div>'+
@@ -960,13 +990,32 @@ function renderNav(){
     return '<button data-tab="'+t.k+'" class="'+(tab===t.k?'on':'')+'"'+(tab===t.k?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" aria-hidden="true">'+t.i+'</svg><span>'+t.n+'</span></button>';
   }).join('');
 }
+/* Se uma tela falhar por qualquer motivo, mostra o erro e as saídas em vez de travar. */
+var lastErr='';
+function errView(e){
+  lastErr=String((e&&e.message)||e)+(e&&e.stack?'\n'+String(e.stack).split('\n').slice(0,4).join('\n'):'');
+  try{console.error(e);}catch(x){}
+  habMode='list';habDraft=null;
+  return '<section class="card"><h2>Esta tela não abriu</h2><p class="note" role="alert">'+esc(String((e&&e.message)||e).slice(0,200))+'</p>'+
+    '<p class="hint">Seus dados estão salvos. Tente limpar o cache; se continuar, me mande a mensagem acima.</p>'+
+    '<div class="tools"><button class="btn" data-act="clearcache">Limpar cache e recarregar</button><button class="btn ghost" data-act="gohoje">Ir para Hoje</button></div></section>';
+}
+/* Trecho de uma tela que falha sozinho, sem derrubar o resto. */
+function safeSection(fn,name){
+  try{return fn();}catch(e){
+    lastErr=String((e&&e.message)||e);try{console.error(e);}catch(x){}
+    return '<section class="card"><h3>'+esc(name)+'</h3><p class="note" role="alert">Não consegui mostrar esta parte: '+esc(lastErr.slice(0,160))+'</p><div class="tools"><button class="btn" data-act="clearcache">Limpar cache e recarregar</button></div></section>';
+  }
+}
 function render(){
   var locked=!!(sb&&!session);
   document.getElementById('nav').hidden=locked;
   if(locked){document.getElementById('app').innerHTML=viewAuth();return;}
   renderNav();
-  document.getElementById('app').innerHTML=(VIEWS[tab]||viewHoje)();
-  if(tab==='habitos'&&habMode==='form')syncHabForm(document.querySelector('.habform'));
+  var html;
+  try{html=(VIEWS[tab]||viewHoje)();}catch(e){html=errView(e);}
+  document.getElementById('app').innerHTML=html;
+  try{if(tab==='habitos'&&habMode==='form')syncHabForm(document.querySelector('.habform'));}catch(e){}
 }
 function go(t){
   if(t===tab)return;
@@ -1081,6 +1130,14 @@ var ACTIONS={
     if(perm!=='granted'){try{perm=await Notification.requestPermission();}catch(e){}}
     if(perm==='granted'){setPush(true);webTick();}
     render();
+  },
+  gohoje:function(){tab='hoje';render();window.scrollTo(0,0);},
+  clearcache:async function(){
+    try{if('serviceWorker' in navigator){var rs=await navigator.serviceWorker.getRegistrations();await Promise.all(rs.map(function(r){return r.unregister();}));}}catch(e){}
+    try{if(window.caches){var ks=await caches.keys();await Promise.all(ks.map(function(k){return caches.delete(k);}));}}catch(e){}
+    if(NATIVE)await resetToBuiltin();
+    var u=location.href.split('#')[0].split('?')[0];
+    location.replace(u+'?r='+Date.now()+'#'+tab);
   },
   otacheck:function(){otaMsg='Procurando…';if(tab==='habitos')render();otaRun(true);},
   otaapply:function(){applyNow();},

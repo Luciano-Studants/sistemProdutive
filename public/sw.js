@@ -1,5 +1,5 @@
 // Service worker mínimo: abre o app mesmo sem internet (rede primeiro, cópia local como reserva).
-const V = 'rotina-v1';
+const V = 'rotina-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -17,7 +17,7 @@ self.addEventListener('fetch', (e) => {
   const u = new URL(r.url);
   if (u.origin !== location.origin) return; // Supabase e fontes passam direto
   e.respondWith(
-    fetch(r)
+    fetch(r, { cache: 'no-cache' }) // sempre confere com o servidor, sem usar cópia velha do navegador
       .then((res) => {
         if (res.ok) { const c = res.clone(); caches.open(V).then((ch) => ch.put(r, c)); }
         return res;
