@@ -698,6 +698,17 @@ function viewEstudos(){
   return h;
 }
 
+/* Concluídos: a seção e cada projeto abrem e fecham. Começam fechados. */
+var projFold={fin:true},projOpen={};
+function finRow(p){
+  var tot=p.steps.length,dn=p.steps.filter(function(x){return x.done;}).length,open=!!projOpen[p.id];
+  return '<div class="finitem'+(open?' open':'')+'"><button class="finrow" data-act="pfold" data-id="'+p.id+'" aria-expanded="'+open+'"><span class="chev" aria-hidden="true">'+(open?'▾':'▸')+'</span><span class="fname">'+esc(p.name)+'</span><span class="chip">'+esc(branchName(p.kind))+' · '+dn+'/'+tot+'</span></button>'+(open?projCard(p):'')+'</div>';
+}
+function finSection(fin){
+  var open=!projFold.fin;
+  return '<button class="finhead" data-act="pfold" data-id="fin" aria-expanded="'+open+'"><span class="chev" aria-hidden="true">'+(open?'▾':'▸')+'</span><h3>Concluídos</h3><span class="chip">'+fin.length+'</span></button>'+
+    (open?'<div class="list">'+fin.map(finRow).join('')+'</div>':'');
+}
 function projCard(p){
   var tot=p.steps.length,dn=p.steps.filter(function(s){return s.done;}).length,pct=tot?Math.round(dn/tot*100):0;
   var h='<section class="card"><div class="subj-h"><div><h3>'+esc(p.name)+'</h3><p class="hint">'+branchName(p.kind)+' · '+dn+' de '+tot+' etapas</p></div>'+delBtn('proj',p.id)+'</div>'+
@@ -729,7 +740,7 @@ function viewProj(){
   var h='<h2>Projetos</h2><p class="hint">Um projeto ativo por vez. Os outros ficam guardados até chegar a vez deles.</p>';
   h+=act?'<h3>Projeto ativo</h3>'+projCard(act):'<p class="empty">Nenhum projeto ativo. Crie um abaixo ou ative um guardado.</p>';
   if(parked.length)h+='<h3>Guardados</h3><div class="grid2">'+parked.map(projCard).join('')+'</div>';
-  if(fin.length)h+='<h3>Concluídos</h3><div class="grid2">'+fin.map(projCard).join('')+'</div>';
+  if(fin.length)h+=finSection(fin);
   h+=branchesCard();
   h+='<section class="card"><h3>Novo projeto</h3><form class="addrow" data-form="proj"><input id="pj-name" name="name" class="full" placeholder="Nome do projeto" autocomplete="off" required>'+
     '<select id="pj-kind" name="kind" aria-label="Ramo do projeto">'+branchOpts('')+'</select>'+
@@ -1132,6 +1143,7 @@ var ACTIONS={
     if(perm==='granted'){setPush(true);webTick();}
     render();
   },
+  pfold:function(b){var id=b.dataset.id;if(id==='fin')projFold.fin=!projFold.fin;else projOpen[id]=!projOpen[id];render();},
   gohoje:function(){tab='hoje';render();window.scrollTo(0,0);},
   clearcache:async function(){
     try{if('serviceWorker' in navigator){var rs=await navigator.serviceWorker.getRegistrations();await Promise.all(rs.map(function(r){return r.unregister();}));}}catch(e){}
