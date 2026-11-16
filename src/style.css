@@ -383,3 +383,9 @@ main{padding-bottom:104px}
 *{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:99px}
+
+/* Tabela de referência de telas */
+.stbl{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.stbl th{font-weight:500;color:var(--muted);text-align:left;padding:6px 8px;white-space:nowrap}
+.stbl td{padding:7px 8px;border-top:1px solid var(--line);white-space:nowrap}
+.stbl tr.on td{background:rgba(255,255,255,.09);color:var(--fg);font-weight:600}

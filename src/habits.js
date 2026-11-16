@@ -252,3 +252,39 @@ export function pomoPlan(total, focus) {
   }
   return out;
 }
+
+/* ---- Referência de uso saudável de telas (dormindo às 00h00) ----
+   [acordar em min, saudável em min, reduzido em min, pausas curtas, pausas de 15 min]. Máximo contínuo: 60 min (limite 90). */
+export const SCREEN_TABLE = [
+  [300, 480, 360, '8', '4'], [330, 480, 360, '8', '4'], [360, 480, 360, '8', '4'],
+  [390, 465, 345, '8', '4'], [420, 450, 330, '8', '4'], [460, 420, 300, '7', '3–4'],
+  [480, 420, 300, '7', '3'], [510, 405, 285, '7', '3'], [540, 390, 270, '7', '3'],
+  [570, 360, 240, '6', '3'], [600, 360, 240, '6', '3']
+];
+export const SCREEN_SPLIT = [
+  { name: 'Saudável', work: 360, own: 60 },
+  { name: 'Saudável, dia intenso', work: 420, own: 60 },
+  { name: 'Reduzido', work: 270, own: 30 },
+  { name: 'Reduzido, dia leve', work: 300, own: 60 }
+];
+export const SCREEN_RULES = [
+  ['A cada 20 min de tela', 'Olhar algo distante por 20 segundos (regra 20-20-20)'],
+  ['A cada 60 min de tela', 'Pausa de 5 a 10 min fora da tela'],
+  ['A cada 2 h acumuladas', 'Pausa maior de 15 min'],
+  ['Após 60 min contínuos', 'Ideal: levantar e fazer uma pausa'],
+  ['Após 90 min contínuos', 'Limite: pausa obrigatória'],
+  ['Últimas 2–3 h antes de dormir', 'Reduzir telas ao máximo; ideal, zero tela na última hora']
+];
+export function wakeMin(t) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || ''));
+  if (!m) return null;
+  const v = Number(m[1]) * 60 + Number(m[2]);
+  return v >= 0 && v < 1440 ? v : null;
+}
+/* Linha da tabela mais próxima do horário de acordar (5h00 a 10h00). */
+export function screenRow(wake) {
+  if (wake == null) return null;
+  let best = SCREEN_TABLE[0];
+  SCREEN_TABLE.forEach(function (r) { if (Math.abs(r[0] - wake) < Math.abs(best[0] - wake)) best = r; });
+  return { wake: best[0], awake: 1440 - best[0], healthy: best[1], reduced: best[2], short: best[3], long: best[4], exact: best[0] === wake, outside: wake < 300 || wake > 600 };
+}
