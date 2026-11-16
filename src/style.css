@@ -389,3 +389,8 @@ main{padding-bottom:104px}
 .stbl th{font-weight:500;color:var(--muted);text-align:left;padding:6px 8px;white-space:nowrap}
 .stbl td{padding:7px 8px;border-top:1px solid var(--line);white-space:nowrap}
 .stbl tr.on td{background:rgba(255,255,255,.09);color:var(--fg);font-weight:600}
+
+.rofield{background:rgba(255,255,255,.03);border:1px dashed var(--line);border-radius:var(--r-sm);padding:11px 14px;color:var(--fg);font-variant-numeric:tabular-nums;user-select:none}
+.rofield small{color:var(--muted)}
+.screenform{display:flex;flex-direction:column;gap:10px}
+.screenform .addrow .fld label{font-size:12px}

@@ -111,6 +111,9 @@ function normalize(r){
   if(HB.wakeMin(s.sleep)==null)s.sleep='00:00';
   delete s.screenWake;
   if(s.screenMode!=='reduzido')s.screenMode='saudavel';
+  var spl0=HB.screenPlan(HB.wakeMin(s.wake),HB.wakeMin(s.sleep));
+  if(spl0)s.screenGoal=s.screenMode==='reduzido'?spl0.reduced:spl0.healthy;
+  if(s.screenMode!=='reduzido')s.screenMode='saudavel';
   if(!s.notif||typeof s.notif!=='object')s.notif={on:false};
   if(typeof s.updatedAt!=='number')s.updatedAt=0;
   return s;
@@ -815,7 +818,8 @@ function stCls(st){return st==='done'?'s2':(st==='pending'?'s1':'');}
 function habLogForm(h,withDate){
   var g=HB.cfgAt(h,todayKey()).goal,inp,btn='Registrar';
   if(g.type==='time')inp='<input name="v" type="time" value="'+nowHM()+'" required aria-label="Horário real">';
-  else if(g.type==='duration'||h.link==='screen')inp='<input name="v" type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="minutos" required aria-label="Minutos">';
+  else if(h.link==='screen')inp='<input name="vh" type="number" min="0" max="24" inputmode="numeric" placeholder="horas" aria-label="Horas"><input name="vm" type="number" min="0" max="1440" inputmode="numeric" placeholder="minutos" aria-label="Minutos">';
+  else if(g.type==='duration')inp='<input name="v" type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="minutos" required aria-label="Minutos">';
   else inp='<input name="v" type="number" min="0.01" step="any" inputmode="decimal" value="1" required aria-label="Quantidade">';
   if(h.link==='screen')btn='Somar';
   return '<form class="goalrow wrapf" data-form="hlog" data-id="'+h.id+'">'+inp+
@@ -878,9 +882,10 @@ function habForm(){
     '<fieldset class="hfs"><legend>Meta</legend>'+
     (screen?'<input type="hidden" name="gtype" value="duration" data-field="hform"><p class="hint">Tempo de tela é um limite diário. O total do dia é o mesmo registro do cartão "Menos telas e redes".</p>':
       '<label class="fld"><span class="lab">Tipo de meta</span><select name="gtype" data-field="hform">'+opt('duration','Duração (minutos ou horas)',g.type==='duration')+opt('count','Repetição ou quantidade',g.type==='count')+opt('time','Horário específico',g.type==='time')+'</select></label>')+
+    (screen&&lockedGoal()!=null?'<input type="hidden" name="gval" value="'+lockedGoal()+'"><input type="hidden" name="gdu" value="min"><div class="fld"><span class="lab">Limite por dia</span><div class="rofield">'+hm(lockedGoal())+' <small>('+lockedGoal()+' min)</small></div><p class="hint">Calculado pelos horários de acordar e dormir em Hábitos > Uso saudável de telas. Não é editado aqui.</p></div>':
     '<div class="addrow" data-showif="gtype=duration|count"><label class="fld"><span class="lab">'+(screen?'Limite por dia':'Valor da meta')+'</span><input name="gval" type="number" min="0" step="any" inputmode="decimal" value="'+esc(gv)+'" placeholder="preencha"></label>'+
     '<label class="fld" data-showif="gtype=duration"><span class="lab">Unidade</span><select name="gdu">'+opt('min','minutos',gdu==='min')+opt('h','horas',gdu==='h')+'</select></label>'+
-    '<label class="fld" data-showif="gtype=count"><span class="lab">Unidade (ex.: ml, copos, páginas)</span><input name="gcu" value="'+esc(g.unit||'')+'" autocomplete="off"></label></div>'+
+    '<label class="fld" data-showif="gtype=count"><span class="lab">Unidade (ex.: ml, copos, páginas)</span><input name="gcu" value="'+esc(g.unit||'')+'" autocomplete="off"></label></div>')+
     '<label class="fld" data-showif="gtype=time"><span class="lab">Horário desejado</span><input name="gtime" type="time" value="'+esc(g.time||'')+'"></label>'+
     '<p class="hint">Deixar a meta em branco não vale zero: o hábito só registra, sem comparar.</p></fieldset>'+
     '<details class="adv"'+((d.remind.on||E.mode!=='none'||habMsg)?' open':'')+'><summary>Ajustes avançados</summary>'+
@@ -976,6 +981,7 @@ function hm(m){var h=Math.floor(m/60),r=m%60;return h+'h'+pad(r);}
 function clk(m){m=((m%1440)+1440)%1440;return pad(Math.floor(m/60))+':'+pad(m%60);}
 /* Aplica horários e tipo de dia em todo o fluxo: meta diária de tela (Hoje, Hábitos, sequência, gráfico),
    hábito de tempo de tela e metas dos hábitos de acordar e dormir (a partir de hoje, sem mexer no passado). */
+function lockedGoal(){var pl=HB.screenPlan(HB.wakeMin(S.wake),HB.wakeMin(S.sleep));return pl?(S.screenMode==='reduzido'?pl.reduced:pl.healthy):null;}
 function setHabGoal(e,goal,t){
   var before=JSON.stringify(HB.cfgAt(e,t).goal);
   if(JSON.stringify(goal)===before&&JSON.stringify(e.goal)===before)return;
@@ -1035,8 +1041,10 @@ function viewHab(){
     '<div class="stats"><div class="stat"><span>Hoje</span><b class="'+(scr==null?'':(scr<=goal?'ok':'over'))+'">'+(scr==null?'—':fmtMin(scr))+'</b></div>'+
     '<div class="stat"><span>Meta diária</span><b>'+fmtMin(goal)+'</b></div>'+
     '<div class="stat"><span>Sequência</span><b>'+sn+'<small> '+(sn===1?'dia':'dias')+'</small></b></div></div>'+
-    '<form class="addrow" data-form="screen"><div><label class="lab" for="sc-min">Tempo de tela hoje (min)</label><input id="sc-min" name="min" type="number" min="0" max="1440" inputmode="numeric" value="'+(scr==null?'':scr)+'" placeholder="0"></div>'+
-    '<div><label class="lab" for="sc-goal">Meta (min)</label><input id="sc-goal" name="goal" type="number" min="10" max="1440" inputmode="numeric" value="'+goal+'"></div>'+
+    '<form class="screenform" data-form="screen"><span class="lab">Tempo de tela hoje</span><div class="addrow"><div class="fld"><label class="hint" for="sc-h">horas</label><input id="sc-h" name="h" type="number" min="0" max="24" inputmode="numeric" value="'+(scr==null?'':Math.floor(scr/60))+'" placeholder="0"></div>'+
+    '<div class="fld"><label class="hint" for="sc-m">minutos</label><input id="sc-m" name="m" type="number" min="0" max="1440" inputmode="numeric" value="'+(scr==null?'':scr%60)+'" placeholder="0"></div></div>'+
+    '<div class="fld"><span class="lab">Meta de tela por dia</span><div class="rofield" role="status">'+hm(goal)+' <small>('+goal+' min)</small></div>'+
+    '<p class="hint">'+(HB.screenPlan(HB.wakeMin(S.wake),HB.wakeMin(S.sleep))?'A meta é calculada a partir dos horários de acordar e dormir em "Uso saudável de telas" e não é editada aqui.':'Provisória. Informe os horários de acordar e dormir em "Uso saudável de telas" para calcular a meta.')+'</p></div>'+
     '<button class="btn" type="submit">Salvar</button></form>'+
     '<div class="sbars"><div class="bars" role="img" aria-label="Tempo de tela nos últimos 14 dias">'+bars+'</div><div class="gl" style="--g:'+(goal/maxY).toFixed(3)+'"><em>meta</em></div></div>'+
     '<p class="hint">Últimos 14 dias, verde dentro da meta e laranja acima. A sequência conta dias seguidos dentro da meta.</p></section>';
@@ -1278,7 +1286,7 @@ var FORMS={
     var t=todayKey(),edit=habEditId;
     habMsg='';habDraft=null;habEditId='';habMode='list';
     mutate(function(s){
-      if(d.link==='screen'&&d.goal.value>0)s.screenGoal=Math.round(d.goal.value);
+      if(d.link==='screen'&&d.goal.value>0&&lockedGoal()==null)s.screenGoal=Math.round(d.goal.value);
       if(!edit){
         var nh=Object.assign({},d,{id:uid(),start:t,paused:false,logs:{}});
         nh.hist=[{from:t,goal:clone(nh.goal),freq:clone(nh.freq)}];
@@ -1299,6 +1307,7 @@ var FORMS={
     var given=String(fd.get('date')||''),key=given||t;
     if(key>t)key=t;if(key<h.start)key=h.start;
     var g=HB.cfgAt(h,key).goal,raw=String(fd.get('v')||''),v;
+    if(h.link==='screen')raw=String((parseInt(fd.get('vh'),10)||0)*60+(parseInt(fd.get('vm'),10)||0));
     if(g.type==='time'&&h.link!=='screen'){
       if(!/^\d{2}:\d{2}$/.test(raw))return;
       v=raw;
@@ -1311,8 +1320,9 @@ var FORMS={
       if(g.type==='time')hh.logs[key]=[ent];else(hh.logs[key]=hh.logs[key]||[]).push(ent);
     });
   },
-  screen:function(fd){var m=parseInt(fd.get('min'),10),g=parseInt(fd.get('goal'),10);
-    mutate(function(s){ensureDay(todayKey()).screen=isNaN(m)?null:Math.max(0,m);if(g>0)s.screenGoal=g;});}
+  screen:function(fd){var hh=parseInt(fd.get('h'),10),mm=parseInt(fd.get('m'),10),none=isNaN(hh)&&isNaN(mm);
+    var tot=none?null:Math.min(1440,Math.max(0,(isNaN(hh)?0:hh)*60+(isNaN(mm)?0:mm)));
+    mutate(function(s){ensureDay(todayKey()).screen=tot;});}
 };
 var FIELDS={
   scrwake:function(t){var v=HB.wakeMin(t.value)==null?'':t.value;mutate(function(s){s.wake=v;applySchedule(s);});},
