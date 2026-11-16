@@ -247,3 +247,139 @@ input[type=checkbox],input[type=radio]{width:auto;padding:0;min-width:0}
 .finitem .card{margin-top:4px}
 .finrow .fname{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}
 .chev{width:16px;flex:none;color:var(--accent)}
+
+/* =====================================================================
+   Visual: preto, cinza e branco. Escuro, minimalista, vidro fosco e
+   transições suaves. Só CSS: nenhum conteúdo, estrutura ou lógica muda.
+   ===================================================================== */
+:root,:root:not([data-theme="light"]),:root[data-theme="dark"],:root[data-theme="light"]{
+  --bg:#0a0a0b;--surface:#131315;--surface2:#1b1b1e;--fg:#f4f4f5;--muted:#8d8d94;--line:rgba(255,255,255,.08);
+  --accent:#f4f4f5;--accent-fg:#0a0a0b;--accent-soft:rgba(255,255,255,.09);
+  --ok:#d4d4d8;--warn:#c9b384;--bad:#e08585;
+  --c-casa:#b4b4ba;--c-faculdade:#e4e4e7;--c-estudo:#8d8d94;--c-projeto:#cfcfd4;--c-plan:#6f6f76;--c-livre:#55555b;--c-outros:#a1a1a8;
+  --r:20px;--r-sm:14px;
+  --glass:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.02));
+  --ease:cubic-bezier(.22,.8,.3,1);
+  color-scheme:dark;
+}
+html{background:var(--bg)}
+body{background:radial-gradient(1100px 520px at 50% -180px,rgba(255,255,255,.07),transparent 70%) no-repeat,var(--bg);
+  -webkit-font-smoothing:antialiased;line-height:1.55;letter-spacing:.005em}
+h1{font-size:26px;font-weight:600;letter-spacing:-.025em}
+h2{font-weight:500;letter-spacing:-.02em}
+h3{font-size:16px;font-weight:600;letter-spacing:-.01em}
+.sub{color:var(--muted)}
+.lab{letter-spacing:.12em;font-size:11px;font-weight:500}
+::selection{background:rgba(255,255,255,.22)}
+*{-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid rgba(255,255,255,.55);outline-offset:3px;border-radius:10px}
+
+/* Cartões em vidro fosco */
+.card,.stat,.block,.finitem,.folder,.sheet{background:var(--glass),var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:0 10px 30px -18px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.04)}
+.card{padding:18px;gap:12px}
+main{gap:14px}
+.grid2,.stats{gap:12px}
+.stat{padding:14px 16px}
+.stat b,.big,.clock{font-weight:500;letter-spacing:-.02em}
+.clock{font-size:60px;font-weight:400;letter-spacing:-.03em}
+.mat,.habcard,.hfs{background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:var(--r-sm)}
+.note{background:rgba(255,255,255,.06);border-radius:var(--r-sm);color:var(--fg)}
+.daycard.today{border-color:rgba(255,255,255,.35);box-shadow:0 0 0 1px rgba(255,255,255,.12),0 14px 36px -20px rgba(255,255,255,.18)}
+.sync{background:rgba(255,255,255,.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-color:var(--line)}
+
+/* Campos */
+input,select,textarea{background:var(--surface2);border:1px solid transparent;border-radius:var(--r-sm);padding:11px 14px;
+  transition:border-color .2s var(--ease),background .2s var(--ease),box-shadow .2s var(--ease)}
+input:hover,select:hover,textarea:hover{background:#202024}
+input:focus,select:focus,textarea:focus{outline:0;border-color:rgba(255,255,255,.4);box-shadow:0 0 0 4px rgba(255,255,255,.07)}
+input[type=checkbox],input[type=radio]{accent-color:#f4f4f5}
+
+/* Botões */
+.btn{background:var(--accent);color:var(--accent-fg);border-radius:var(--r-sm);font-weight:600;min-height:42px;
+  transition:transform .15s var(--ease),background .2s var(--ease),box-shadow .25s var(--ease),opacity .2s}
+.btn:hover{box-shadow:0 8px 24px -10px rgba(255,255,255,.35)}
+.btn:active{transform:scale(.96)}
+.btn.ghost{background:rgba(255,255,255,.04);color:var(--fg);border:1px solid rgba(255,255,255,.14)}
+.btn.ghost:hover{background:rgba(255,255,255,.1);box-shadow:none}
+.x{transition:background .2s,color .2s,transform .15s var(--ease)}
+.x:hover{background:rgba(255,255,255,.08);color:var(--fg)}
+.x:active{transform:scale(.9)}
+.x.ask{color:var(--bad)}
+
+/* Marcadores e seletores */
+.chk{background:transparent;border:1.5px solid rgba(255,255,255,.28);
+  transition:background .25s var(--ease),border-color .25s var(--ease),color .2s,transform .2s var(--ease)}
+.chk:active{transform:scale(.88)}
+.chk.on{background:var(--fg);border-color:var(--fg);color:var(--accent-fg)}
+.dots button,.dotbtn{background:var(--surface2);border:1px solid transparent;border-radius:12px;
+  transition:background .2s var(--ease),color .2s,transform .15s var(--ease)}
+.dots button:active{transform:scale(.92)}
+.dots button.on{background:var(--fg);color:var(--accent-fg)}
+.seg{background:var(--surface2);border:0;border-radius:99px;padding:3px;gap:2px}
+.segbtn{background:transparent;border-radius:99px;color:var(--muted);transition:background .25s var(--ease),color .2s}
+.segbtn.on{background:var(--fg);color:var(--accent-fg)}
+.rad,.dchk{background:var(--surface2);border:1px solid transparent;color:var(--muted);transition:background .2s var(--ease),color .2s,border-color .2s}
+.rad:hover,.dchk:hover{background:#242428}
+.rad:has(input:checked),.dchk:has(input:checked){background:var(--fg);color:var(--accent-fg);border-color:var(--fg)}
+.pill{background:rgba(255,255,255,.1);color:var(--fg)}
+.chip{background:rgba(255,255,255,.07);color:var(--muted)}
+.chip.warn{color:var(--warn)}
+.st{background:transparent;border-color:rgba(255,255,255,.14);color:var(--muted);transition:background .2s,color .2s}
+.st.s1{background:rgba(255,255,255,.12);color:var(--fg);border-color:transparent}
+.st.s2{background:var(--fg);color:var(--accent-fg);border-color:transparent}
+.pchip{background:rgba(255,255,255,.08);color:var(--fg)}
+.pchip.s,.pchip.l{background:transparent;color:var(--muted);border:1px solid var(--line)}
+.pchip.now{outline:1.5px solid var(--fg)}
+.phase{color:var(--fg);letter-spacing:.04em}
+.phase.s,.phase.l{color:var(--muted)}
+
+/* Barras de progresso */
+.progress{height:6px;background:rgba(255,255,255,.08)}
+.progress i{background:linear-gradient(90deg,#8d8d94,#f4f4f5);border-radius:99px;transition:width .6s var(--ease)}
+.progress.ok i{background:#f4f4f5}
+.progress.over i{background:var(--warn)}
+.bar .t{background:rgba(255,255,255,.07);border-radius:99px}
+.bar .t i{background:linear-gradient(180deg,#f4f4f5,#8d8d94);transition:height .5s var(--ease)}
+.bar.ok .t i{background:#f4f4f5}
+.bar.over .t i{background:var(--warn)}
+.gl{border-top-color:rgba(255,255,255,.28)}
+
+/* Estante e retráteis */
+.folder{border-radius:0 var(--r) var(--r) var(--r)}
+.ftab{background:rgba(255,255,255,.05);border-bottom:1px solid var(--line);border-radius:0 var(--r) 0 0}
+.folder:not(.open) .ftab{border-radius:0 var(--r) var(--r) var(--r)}
+.foldbtn svg{stroke:var(--fg)}
+.chev{color:var(--muted);transition:transform .25s var(--ease)}
+.finhead,.finrow,.foldbtn,.hmain{transition:opacity .2s}
+.finhead:hover,.finrow:hover,.foldbtn:hover{opacity:.8}
+.finitem{padding:0 14px}
+.adv>summary{transition:opacity .2s}
+.adv>summary:hover{opacity:.75}
+
+/* Barra de abas: pílula flutuante em vidro (celular) */
+nav.tabs{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));padding:6px;gap:4px;
+  background:rgba(22,22,25,.72);backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px) saturate(1.4);
+  border:1px solid rgba(255,255,255,.1);border-radius:28px;box-shadow:0 18px 40px -12px rgba(0,0,0,.85)}
+nav.tabs button{border-radius:22px;color:var(--muted);padding:8px 2px;transition:background .3s var(--ease),color .25s,transform .15s var(--ease)}
+nav.tabs button:active{transform:scale(.93)}
+nav.tabs button.on{background:var(--fg);color:var(--accent-fg)}
+main{padding-bottom:104px}
+@media (min-width:760px){
+  nav.tabs{position:sticky;top:12px;left:auto;right:auto;bottom:auto;margin:0 auto 16px;border-radius:99px;padding:5px;z-index:20}
+  nav.tabs button{border-radius:99px;padding:9px 6px}
+  nav.tabs button:hover:not(.on){background:rgba(255,255,255,.06);color:var(--fg)}
+  main{padding-bottom:40px}
+}
+
+/* Janelas e aviso de atualização */
+.modal{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);animation:rn-fade .25s var(--ease)}
+.sheet{border-radius:26px;background:var(--glass),#151517;animation:rn-rise .35s var(--ease)}
+.ota{background:rgba(22,22,25,.8);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--line)}
+@keyframes rn-fade{from{opacity:0}to{opacity:1}}
+@keyframes rn-rise{from{opacity:0;transform:translateY(18px) scale(.98)}to{opacity:1;transform:none}}
+
+/* Rolagem discreta */
+*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:99px}
