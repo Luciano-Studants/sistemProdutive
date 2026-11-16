@@ -58,7 +58,7 @@ function defTemplate(){
 function defState(){
   return {v:1,updatedAt:0,template:defTemplate(),tasks:[],deadlines:[],events:[],
     subjects:[{id:'s1',name:'Matemática',min:0,topics:[]},{id:'s2',name:'Física',min:0,topics:[]},{id:'s3',name:'Programação',min:0,topics:[]}],
-    projects:[],ideas:[],days:{},screenGoal:120,screenWake:'',screenMode:'saudavel',notif:{on:false},
+    projects:[],ideas:[],days:{},screenGoal:120,wake:'',sleep:'00:00',screenMode:'saudavel',notif:{on:false},
     courses:[],habits:[],branches:[{id:'dev',name:'Desenvolvimento'},{id:'design',name:'Design'}],pomo:{total:120,focus:25}};
 }
 /* Completa qualquer campo que falte num hábito, para um registro incompleto nunca derrubar a tela. */
@@ -107,7 +107,9 @@ function normalize(r){
     ['a','b','c'].forEach(function(k){if(!s.template[i][k])s.template[i][k]=dt[i][k];});
   }
   if(typeof s.screenGoal!=='number')s.screenGoal=120;
-  if(HB.wakeMin(s.screenWake)==null)s.screenWake='';
+  if(HB.wakeMin(s.wake)==null)s.wake=HB.wakeMin(s.screenWake)!=null?s.screenWake:'';
+  if(HB.wakeMin(s.sleep)==null)s.sleep='00:00';
+  delete s.screenWake;
   if(s.screenMode!=='reduzido')s.screenMode='saudavel';
   if(!s.notif||typeof s.notif!=='object')s.notif={on:false};
   if(typeof s.updatedAt!=='number')s.updatedAt=0;
@@ -519,6 +521,8 @@ function viewHoje(){
     '<div class="stat"><span>Blocos</span><b>'+doneN+'<small>/'+planned.length+'</small></b></div>'+
     '<div class="stat"><span>Foco</span><b>'+fmtMin(day.focusMin||0)+'</b></div>'+
     '<div class="stat"><span>Telas</span><b class="'+(scr==null?'':(scr<=goal?'ok':'over'))+'">'+(scr==null?'—':fmtMin(scr))+'</b></div></div>';
+  var spl=HB.screenPlan(HB.wakeMin(S.wake),HB.wakeMin(S.sleep));
+  if(spl)h+='<p class="hint">Telas: até '+hm(goal)+' hoje · reduzir a partir das '+clk(spl.cut)+' · zero tela a partir das '+clk(spl.zero)+'.</p>';
   if(yest.next)h+='<p class="note">Ontem você deixou como primeira ação: <b>'+esc(yest.next)+'</b></p>';
   h+='<section class="card"><label class="lab" for="main">Tarefa principal de hoje</label><input id="main" data-field="main" value="'+esc(day.main||'')+'" placeholder="O que precisa estar pronto até 23h?" autocomplete="off"></section>';
   var evToday=S.events.filter(function(e){return e.date===k&&!e.done;}).sort(evSort);
@@ -969,24 +973,49 @@ function streak(){
   return n;
 }
 function hm(m){var h=Math.floor(m/60),r=m%60;return h+'h'+pad(r);}
+function clk(m){m=((m%1440)+1440)%1440;return pad(Math.floor(m/60))+':'+pad(m%60);}
+/* Aplica horários e tipo de dia em todo o fluxo: meta diária de tela (Hoje, Hábitos, sequência, gráfico),
+   hábito de tempo de tela e metas dos hábitos de acordar e dormir (a partir de hoje, sem mexer no passado). */
+function setHabGoal(e,goal,t){
+  var before=JSON.stringify(HB.cfgAt(e,t).goal);
+  if(JSON.stringify(goal)===before&&JSON.stringify(e.goal)===before)return;
+  e.goal=goal;
+  e.hist=e.hist||[{from:e.start,goal:clone(goal),freq:clone(e.freq)}];
+  var last=e.hist[e.hist.length-1],cfg=HB.cfgAt(e,t);
+  var ent={from:t,goal:clone(goal),freq:clone(cfg.freq||e.freq)};
+  if(last&&last.from===t)e.hist[e.hist.length-1]=ent;else if(JSON.stringify(cfg.goal)!==JSON.stringify(goal))e.hist.push(ent);
+}
+function applySchedule(s){
+  var pl=HB.screenPlan(HB.wakeMin(s.wake),HB.wakeMin(s.sleep));if(!pl)return;
+  var goal=s.screenMode==='reduzido'?pl.reduced:pl.healthy,t=todayKey();
+  s.screenGoal=goal;
+  (s.habits||[]).forEach(function(h){
+    var g=h.goal||{};
+    if(h.link==='screen')setHabGoal(h,{type:'duration',value:goal,unit:g.unit||'',time:''},t);
+    else if(h.tpl==='wake'&&g.type==='time')setHabGoal(h,{type:'time',value:null,unit:g.unit||'',time:s.wake},t);
+    else if(h.tpl==='sleep'&&g.type==='time')setHabGoal(h,{type:'time',value:null,unit:g.unit||'',time:s.sleep},t);
+  });
+}
 function screenRef(){
-  var row=HB.screenRow(HB.wakeMin(S.screenWake)),red=S.screenMode==='reduzido',scr=getDay(todayKey()).screen;
-  var h='<section class="card"><h3>Uso saudável de telas</h3><p class="hint">Referência para quem dorme às 00h00. Vale para toda a tela: computador, celular, TV, vídeos, redes e jogos.</p>'+
-    '<div class="fld"><label class="lab" for="sr-wake">Horário em que você acorda</label><input id="sr-wake" type="time" data-field="scrwake" value="'+esc(S.screenWake)+'"></div>';
-  if(!row)h+='<p class="note">Informe o horário de acordar para ver o limite de tela, as pausas e a divisão do dia.</p>';
+  var pl=HB.screenPlan(HB.wakeMin(S.wake),HB.wakeMin(S.sleep)),red=S.screenMode==='reduzido',scr=getDay(todayKey()).screen;
+  var h='<section class="card"><h3>Uso saudável de telas</h3><p class="hint">Informe quando você acorda e quando dorme. O app calcula o limite de tela, as pausas e o horário de reduzir telas, e aplica em Hoje, em Hábitos e nas metas dos hábitos de tela, acordar e dormir (a partir de hoje).</p>'+
+    '<div class="addrow"><div class="fld"><label class="lab" for="sr-wake">Acordo às</label><input id="sr-wake" type="time" data-field="scrwake" value="'+esc(S.wake)+'"></div>'+
+    '<div class="fld"><label class="lab" for="sr-sleep">Durmo às</label><input id="sr-sleep" type="time" data-field="scrsleep" value="'+esc(S.sleep)+'"></div></div>';
+  if(!pl)h+='<p class="note">Preencha o horário de acordar e o de dormir (as horas acordado precisam ser de 4h ou mais) para ver o cálculo.</p>';
   else{
-    var goal=red?row.reduced:row.healthy;
+    var goal=red?pl.reduced:pl.healthy,work=red?pl.workR:pl.workH,own=red?pl.personalR:pl.personalH;
     h+='<div class="seg" role="group" aria-label="Tipo de dia"><button class="segbtn'+(red?'':' on')+'" data-act="scrmode" data-val="saudavel" aria-pressed="'+(!red)+'">Saudável</button><button class="segbtn'+(red?' on':'')+'" data-act="scrmode" data-val="reduzido" aria-pressed="'+red+'">Reduzido</button></div>'+
-    '<div class="stats"><div class="stat"><span>Horas acordado</span><b>'+hm(row.awake)+'</b></div><div class="stat"><span>'+(red?'Uso reduzido':'Uso saudável')+'</span><b>'+hm(goal)+'</b></div><div class="stat"><span>Máx. contínuo</span><b>60<small> min</small></b></div></div>'+
-    '<p class="hint">'+(row.outside?'Seu horário está fora da faixa 5h–10h; usei a linha mais próxima ('+hm(row.wake)+'). ':(row.exact?'':'Linha mais próxima da tabela: acordar às '+hm(row.wake)+'. '))+(red?'Dia reduzido serve para recuperação: fadiga, sono ruim, olho irritado, ansiedade ou menos demanda.':'Meta normal de tempo total de tela em um dia.')+'</p>'+
-    '<ul class="kv"><li><span>Pausas curtas</span>'+row.short+' de 5–10 min</li><li><span>Pausas maiores</span>'+row.long+' de 15 min</li><li><span>Limite absoluto</span>90 min seguidos</li><li><span>Meta atual</span>'+fmtMin(S.screenGoal)+'</li></ul>'+
-    '<button class="btn" data-act="scruse" data-val="'+goal+'"'+(S.screenGoal===goal?' disabled':'')+'>Usar '+hm(goal)+' como minha meta</button>';
+    '<div class="stats"><div class="stat"><span>Horas acordado</span><b>'+hm(pl.awake)+'</b></div><div class="stat"><span>'+(red?'Uso reduzido':'Uso saudável')+'</span><b>'+hm(goal)+'</b></div><div class="stat"><span>Máx. contínuo</span><b>60<small> min</small></b></div></div>'+
+    '<p class="hint">'+(pl.fromTable?'Valor direto da tabela (acordar às '+clk(pl.tableWake)+', dormir às 00:00). ':'Calculado pelo padrão da tabela para '+hm(pl.awake)+' acordado. ')+(pl.outside?'Fora da faixa de 14h a 19h acordado da tabela: confira se faz sentido para você. ':'')+(red?'Dia reduzido serve para recuperação: fadiga, sono ruim, olho irritado, ansiedade ou menos demanda.':'Meta normal de tempo total de tela em um dia.')+'</p>'+
+    '<ul class="kv"><li><span>Meta diária aplicada</span>'+fmtMin(S.screenGoal)+'</li><li><span>Divisão do dia</span>'+hm(work)+' trabalho + '+(own<60?own+' min':'1h')+' pessoal</li>'+
+    '<li><span>Pausas curtas</span>'+pl.short+' de 5–10 min</li><li><span>Pausas maiores</span>'+pl.long+' de 15 min</li>'+
+    '<li><span>Reduzir telas a partir de</span>'+clk(pl.cut)+'</li><li><span>Zero tela a partir de</span>'+clk(pl.zero)+'</li></ul>';
     if(scr!=null&&scr>480)h+='<p class="note">'+(scr>=540?'Hoje passou de 9h: sinal de sobrecarga. Aumente pausas, movimento, sono e tempo offline.':'Hoje passou de 8h: reduza o uso pessoal amanhã.')+'</p>';
   }
-  h+='<details class="adv"><summary>Divisão entre trabalho e uso pessoal</summary><ul class="kv">'+HB.SCREEN_SPLIT.map(function(x){return '<li><span>'+x.name+'</span>'+hm(x.work)+' trabalho + '+(x.own<60?x.own+' min':'1h')+' pessoal = '+hm(x.work+x.own)+'</li>';}).join('')+'</ul></details>'+
-    '<details class="adv"><summary>Regras de pausa</summary><ul class="kv">'+HB.SCREEN_RULES.map(function(r){return '<li><span>'+r[0]+'</span>'+r[1]+'</li>';}).join('')+'</ul><p class="hint">Não use o celular como pausa: a pausa é longe de qualquer tela. Não passe de 8h totais de forma habitual.</p></details>'+
-    '<details class="adv"><summary>Tabela por horário de acordar</summary><div class="kv" style="display:block;overflow-x:auto"><table class="stbl"><thead><tr><th>Acordar</th><th>Saudável</th><th>Reduzido</th><th>Pausas</th></tr></thead><tbody>'+
-    HB.SCREEN_TABLE.map(function(r){var on=row&&row.wake===r[0];return '<tr'+(on?' class="on"':'')+'><td>'+hm(r[0])+'</td><td>'+hm(r[1])+'</td><td>'+hm(r[2])+'</td><td>'+r[3]+' + '+r[4]+'</td></tr>';}).join('')+'</tbody></table></div></details></section>';
+  h+='<details class="adv"><summary>Regras de pausa</summary><ul class="kv">'+HB.SCREEN_RULES.map(function(r){return '<li><span>'+r[0]+'</span>'+r[1]+'</li>';}).join('')+'</ul><p class="hint">Não use o celular como pausa: a pausa é longe de qualquer tela. Não passe de 8h totais de forma habitual.</p></details>'+
+    '<details class="adv"><summary>Divisão entre trabalho e uso pessoal</summary><ul class="kv">'+HB.SCREEN_SPLIT.map(function(x){return '<li><span>'+x.name+'</span>'+hm(x.work)+' trabalho + '+(x.own<60?x.own+' min':'1h')+' pessoal = '+hm(x.work+x.own)+'</li>';}).join('')+'</ul></details>'+
+    '<details class="adv"><summary>Tabela de referência (dormindo às 00h00)</summary><div class="kv" style="display:block;overflow-x:auto"><table class="stbl"><thead><tr><th>Acordar</th><th>Saudável</th><th>Reduzido</th><th>Pausas</th></tr></thead><tbody>'+
+    HB.SCREEN_TABLE.map(function(r){var on=pl&&pl.fromTable&&pl.tableWake===r[0];return '<tr'+(on?' class="on"':'')+'><td>'+hm(r[0])+'</td><td>'+hm(r[1])+'</td><td>'+hm(r[2])+'</td><td>'+r[3]+' + '+r[4]+'</td></tr>';}).join('')+'</tbody></table></div></details></section>';
   return h;
 }
 function viewHab(){
@@ -1168,8 +1197,7 @@ var ACTIONS={
     render();
   },
   pfold:function(b){var id=b.dataset.id;if(id==='fin')projFold.fin=!projFold.fin;else projOpen[id]=!projOpen[id];render();},
-  scrmode:function(b){var v=b.dataset.val==='reduzido'?'reduzido':'saudavel';mutate(function(s){s.screenMode=v;});},
-  scruse:function(b){var g=parseInt(b.dataset.val,10);if(g>0)mutate(function(s){s.screenGoal=g;});},
+  scrmode:function(b){var v=b.dataset.val==='reduzido'?'reduzido':'saudavel';mutate(function(s){s.screenMode=v;applySchedule(s);});},
   gohoje:function(){tab='hoje';render();window.scrollTo(0,0);},
   clearcache:async function(){
     try{if('serviceWorker' in navigator){var rs=await navigator.serviceWorker.getRegistrations();await Promise.all(rs.map(function(r){return r.unregister();}));}}catch(e){}
@@ -1287,7 +1315,8 @@ var FORMS={
     mutate(function(s){ensureDay(todayKey()).screen=isNaN(m)?null:Math.max(0,m);if(g>0)s.screenGoal=g;});}
 };
 var FIELDS={
-  scrwake:function(t){var v=HB.wakeMin(t.value)==null?'':t.value;mutate(function(s){s.screenWake=v;});},
+  scrwake:function(t){var v=HB.wakeMin(t.value)==null?'':t.value;mutate(function(s){s.wake=v;applySchedule(s);});},
+  scrsleep:function(t){var v=HB.wakeMin(t.value)==null?'':t.value;if(!v)return;mutate(function(s){s.sleep=v;applySchedule(s);});},
   import:function(t){
     var f=t.files&&t.files[0];if(!f)return;
     var r=new FileReader();

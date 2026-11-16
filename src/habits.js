@@ -281,10 +281,25 @@ export function wakeMin(t) {
   const v = Number(m[1]) * 60 + Number(m[2]);
   return v >= 0 && v < 1440 ? v : null;
 }
-/* Linha da tabela mais próxima do horário de acordar (5h00 a 10h00). */
-export function screenRow(wake) {
-  if (wake == null) return null;
-  let best = SCREEN_TABLE[0];
-  SCREEN_TABLE.forEach(function (r) { if (Math.abs(r[0] - wake) < Math.abs(best[0] - wake)) best = r; });
-  return { wake: best[0], awake: 1440 - best[0], healthy: best[1], reduced: best[2], short: best[3], long: best[4], exact: best[0] === wake, outside: wake < 300 || wake > 600 };
+/* Cálculo pelo horário de acordar e de dormir.
+   Horas acordado = dormir - acordar. Se o par bate com uma linha da tabela (dormir às 00h00), usa a linha.
+   Senão aplica o padrão da tabela: 8h até 18h acordado; abaixo disso, 30 min a menos por hora acordado a menos,
+   arredondado para baixo de 15 em 15 min. Uso reduzido = saudável menos 2h. Pausas curtas = horas de tela arredondadas para cima. */
+export function screenPlan(wake, sleep) {
+  if (wake == null || sleep == null) return null;
+  const awake = (sleep - wake + 1440) % 1440;
+  if (awake < 240) return null;
+  const row = sleep === 0 ? SCREEN_TABLE.find(function (r) { return r[0] === wake; }) : null;
+  let healthy, reduced, short, long;
+  if (row) { healthy = row[1]; reduced = row[2]; short = row[3]; long = row[4]; }
+  else {
+    healthy = Math.max(180, Math.min(480, Math.floor((480 - Math.max(0, 1080 - awake) / 2) / 15) * 15));
+    reduced = Math.max(60, healthy - 120);
+    short = String(Math.ceil(healthy / 60));
+    long = healthy >= 450 ? '4' : healthy >= 420 ? '3–4' : '3';
+  }
+  const personal = 60, workH = healthy - personal, workR = Math.max(0, reduced - 30);
+  return { awake, healthy, reduced, short, long, fromTable: !!row, tableWake: row ? row[0] : null,
+    outside: awake < 840 || awake > 1140, workH, personalH: personal, workR, personalR: 30,
+    cut: (sleep - 180 + 1440) % 1440, zero: (sleep - 60 + 1440) % 1440 };
 }
